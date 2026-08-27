@@ -1,0 +1,346 @@
+name: Release
+
+on:
+  workflow_dispatch:
+    inputs:
+      phase:
+        description: Prepare a draft and npm stage, or publish an approved release
+        required: true
+        type: choice
+        options:
+          - prepare
+          - publish
+      tag:
+        description: Existing version tag, for example v0.1.0-rc.1
+        required: true
+        type: string
+      stage_package:
+        description: Stage the npm package during prepare. Disable only for the first npm bootstrap.
+        required: true
+        default: true
+        type: boolean
+
+permissions:
+  contents: read
+
+concurrency:
+  group: release-${{ inputs.tag }}
+  cancel-in-progress: false
+
+env:
+  NODE_VERSION: 22.19.0
+  NPM_VERSION: 11.19.1
+
+jobs:
+  validate:
+    name: Validate release candidate
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    outputs:
+      artifact_name: ${{ steps.metadata.outputs.artifact_name }}
+      is_prerelease: ${{ steps.metadata.outputs.is_prerelease }}
+      npm_dist_tag: ${{ steps.metadata.outputs.npm_dist_tag }}
+      package_integrity: ${{ steps.pack.outputs.package_integrity }}
+      package_name: ${{ steps.metadata.outputs.package_name }}
+      package_version: ${{ steps.metadata.outputs.package_version }}
+
+    steps:
+      - name: Check out tagged source
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ inputs.tag }}
+          fetch-depth: 0
+          persist-credentials: false
+
+      - name: Verify tag belongs to main
+        env:
+          RELEASE_TAG: ${{ inputs.tag }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          git fetch --no-tags origin main
+          tag_sha="$(git rev-parse "${RELEASE_TAG}^{commit}")"
+          checkout_sha="$(git rev-parse HEAD)"
+          if [[ "${tag_sha}" != "${checkout_sha}" ]]; then
+            echo "The checked out commit does not match ${RELEASE_TAG}." >&2
+            exit 1
+          fi
+          if ! git merge-base --is-ancestor "${tag_sha}" origin/main; then
+            echo "${RELEASE_TAG} must point to a commit reachable from main." >&2
+            exit 1
+          fi
+
+      - name: Read and verify release metadata
+        id: metadata
+        env:
+          RELEASE_TAG: ${{ inputs.tag }}
+        run: |
+          node --input-type=module <<'NODE'
+          import { appendFileSync, readFileSync } from 'node:fs'
+
+          const packageJson = JSON.parse(readFileSync('package.json', 'utf8'))
+          const serverJson = JSON.parse(readFileSync('server.json', 'utf8'))
+          const versionPattern = /^(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)(?:-[0-9A-Za-z.-]+)?$/u
+          const version = packageJson.version
+          const expectedTag = `v${version}`
+
+          if (!versionPattern.test(version)) {
+            throw new Error(`package.json contains an unsupported version: ${version}`)
+          }
+          if (process.env.RELEASE_TAG !== expectedTag) {
+            throw new Error(`release tag must be ${expectedTag}`)
+          }
+          if (serverJson.version !== version) {
+            throw new Error('server.json and package.json versions must match')
+          }
+          const npmPackage = serverJson.packages?.find(
+            (candidate) => candidate.registryType === 'npm',
+          )
+          if (npmPackage?.identifier !== packageJson.name || npmPackage?.version !== version) {
+            throw new Error('server.json npm metadata must match package.json')
+          }
+
+          const prerelease = version.includes('-')
+          const output = process.env.GITHUB_OUTPUT
+          const values = {
+            artifact_name: `kledo-mcp-${version}-npm`,
+            is_prerelease: String(prerelease),
+            npm_dist_tag: prerelease ? 'next' : 'latest',
+            package_name: packageJson.name,
+            package_version: version,
+          }
+          for (const [key, value] of Object.entries(values)) {
+            appendFileSync(output, `${key}=${value}\n`)
+          }
+          NODE
+
+      - name: Set up Node.js
+        uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          package-manager-cache: false
+
+      - name: Install release npm version
+        run: npm install --global "npm@${NPM_VERSION}"
+
+      - name: Install locked dependencies
+        run: npm ci --ignore-scripts
+
+      - name: Typecheck
+        run: npm run typecheck
+
+      - name: Test
+        run: npm test
+
+      - name: Build
+        run: npm run build
+
+      - name: Pack release artifact
+        id: pack
+        shell: bash
+        run: |
+          set -euo pipefail
+          pack_json="$(npm pack --json)"
+          tarball="$(jq -r '.[0].filename' <<<"${pack_json}")"
+          integrity="$(jq -r '.[0].integrity' <<<"${pack_json}")"
+          if [[ ! -f "${tarball}" || -z "${integrity}" || "${integrity}" == "null" ]]; then
+            echo 'npm pack did not produce a valid artifact and integrity.' >&2
+            exit 1
+          fi
+          echo "tarball=${tarball}" >> "${GITHUB_OUTPUT}"
+          echo "package_integrity=${integrity}" >> "${GITHUB_OUTPUT}"
+
+      - name: Upload verified package
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
+        with:
+          name: ${{ steps.metadata.outputs.artifact_name }}
+          path: ${{ steps.pack.outputs.tarball }}
+          if-no-files-found: error
+          retention-days: 14
+
+  prepare:
+    name: Prepare release
+    if: ${{ inputs.phase == 'prepare' }}
+    needs: validate
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    environment: npm-release
+    permissions:
+      contents: write
+      id-token: write
+
+    steps:
+      - name: Set up Node.js
+        uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          registry-url: https://registry.npmjs.org
+          package-manager-cache: false
+
+      - name: Install release npm version
+        run: npm install --global "npm@${NPM_VERSION}"
+
+      - name: Download verified package
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+        with:
+          name: ${{ needs.validate.outputs.artifact_name }}
+          path: release-package
+
+      - name: Create draft GitHub release
+        env:
+          GH_TOKEN: ${{ github.token }}
+          IS_PRERELEASE: ${{ needs.validate.outputs.is_prerelease }}
+          RELEASE_TAG: ${{ inputs.tag }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          if release_json="$(gh release view "${RELEASE_TAG}" --repo "${GITHUB_REPOSITORY}" --json isDraft,url 2>/dev/null)"; then
+            if [[ "$(jq -r '.isDraft' <<<"${release_json}")" != 'true' ]]; then
+              echo "${RELEASE_TAG} is already public and cannot be prepared again." >&2
+              exit 1
+            fi
+            echo "Using existing draft: $(jq -r '.url' <<<"${release_json}")"
+            exit 0
+          fi
+
+          args=(
+            gh release create "${RELEASE_TAG}"
+            --repo "${GITHUB_REPOSITORY}"
+            --verify-tag
+            --draft
+            --generate-notes
+            --latest=false
+          )
+          if [[ "${IS_PRERELEASE}" == 'true' ]]; then
+            args+=(--prerelease)
+          fi
+          "${args[@]}"
+
+      - name: Verify npm package can be staged
+        if: ${{ inputs.stage_package }}
+        env:
+          PACKAGE_NAME: ${{ needs.validate.outputs.package_name }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          if ! npm view "${PACKAGE_NAME}" name >/dev/null 2>&1; then
+            echo 'npm staged publishing requires the package to exist first.' >&2
+            echo 'For the first release, rerun prepare with stage_package disabled and follow docs/releasing.md.' >&2
+            exit 1
+          fi
+
+      - name: Stage package on npm
+        if: ${{ inputs.stage_package }}
+        env:
+          NPM_DIST_TAG: ${{ needs.validate.outputs.npm_dist_tag }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          tarball="$(find release-package -maxdepth 1 -type f -name '*.tgz' -print -quit)"
+          if [[ -z "${tarball}" ]]; then
+            echo 'Verified npm tarball is missing.' >&2
+            exit 1
+          fi
+          npm stage publish "${tarball}" --tag "${NPM_DIST_TAG}"
+
+      - name: Write preparation summary
+        env:
+          PACKAGE_NAME: ${{ needs.validate.outputs.package_name }}
+          PACKAGE_VERSION: ${{ needs.validate.outputs.package_version }}
+          RELEASE_TAG: ${{ inputs.tag }}
+          STAGE_PACKAGE: ${{ inputs.stage_package }}
+        shell: bash
+        run: |
+          {
+            echo '### Release prepared'
+            echo
+            echo "- GitHub release: draft for ${RELEASE_TAG}"
+            echo "- npm package: ${PACKAGE_NAME}@${PACKAGE_VERSION}"
+            if [[ "${STAGE_PACKAGE}" == 'true' ]]; then
+              echo '- npm state: staged and waiting for maintainer review plus 2FA approval'
+            else
+              echo '- npm state: bootstrap required before the publish phase'
+            fi
+          } >> "${GITHUB_STEP_SUMMARY}"
+
+  publish:
+    name: Publish approved release
+    if: ${{ inputs.phase == 'publish' }}
+    needs: validate
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    environment: npm-release
+    permissions:
+      contents: write
+
+    steps:
+      - name: Set up Node.js
+        uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          registry-url: https://registry.npmjs.org
+          package-manager-cache: false
+
+      - name: Install release npm version
+        run: npm install --global "npm@${NPM_VERSION}"
+
+      - name: Verify approved npm package
+        env:
+          EXPECTED_INTEGRITY: ${{ needs.validate.outputs.package_integrity }}
+          PACKAGE_NAME: ${{ needs.validate.outputs.package_name }}
+          PACKAGE_VERSION: ${{ needs.validate.outputs.package_version }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          package_spec="${PACKAGE_NAME}@${PACKAGE_VERSION}"
+          if ! published_integrity="$(npm view "${package_spec}" dist.integrity 2>/dev/null)"; then
+            echo "${package_spec} is not public on npm yet." >&2
+            echo 'Review and approve the staged package with 2FA before publishing the GitHub release.' >&2
+            exit 1
+          fi
+          if [[ "${published_integrity}" != "${EXPECTED_INTEGRITY}" ]]; then
+            echo "The npm artifact for ${package_spec} does not match the verified release artifact." >&2
+            exit 1
+          fi
+
+      - name: Publish GitHub release
+        env:
+          GH_TOKEN: ${{ github.token }}
+          IS_PRERELEASE: ${{ needs.validate.outputs.is_prerelease }}
+          RELEASE_TAG: ${{ inputs.tag }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          if ! release_json="$(gh release view "${RELEASE_TAG}" --repo "${GITHUB_REPOSITORY}" --json isDraft,url 2>/dev/null)"; then
+            echo "Prepare the draft release for ${RELEASE_TAG} before publishing it." >&2
+            exit 1
+          fi
+          if [[ "$(jq -r '.isDraft' <<<"${release_json}")" != 'true' ]]; then
+            echo "${RELEASE_TAG} is already public: $(jq -r '.url' <<<"${release_json}")"
+            exit 0
+          fi
+
+          args=(
+            gh release edit "${RELEASE_TAG}"
+            --repo "${GITHUB_REPOSITORY}"
+            --draft=false
+          )
+          if [[ "${IS_PRERELEASE}" == 'true' ]]; then
+            args+=(--prerelease --latest=false)
+          else
+            args+=(--prerelease=false --latest)
+          fi
+          "${args[@]}"
+
+      - name: Write publication summary
+        env:
+          PACKAGE_NAME: ${{ needs.validate.outputs.package_name }}
+          PACKAGE_VERSION: ${{ needs.validate.outputs.package_version }}
+          RELEASE_TAG: ${{ inputs.tag }}
+        run: |
+          {
+            echo '### Release published'
+            echo
+            echo "- GitHub: https://github.com/${GITHUB_REPOSITORY}/releases/tag/${RELEASE_TAG}"
+            echo "- npm: https://www.npmjs.com/package/${PACKAGE_NAME}/v/${PACKAGE_VERSION}"
+          } >> "${GITHUB_STEP_SUMMARY}"

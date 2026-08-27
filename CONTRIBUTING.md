@@ -136,12 +136,17 @@ Before requesting review:
 - run `npm run typecheck`, `npm test`, and `npm run build`;
 - add or update MCP contract tests for interface changes;
 - add fixture tests for upstream response changes;
-- update README capability and limitation tables;
+- update `docs/tool-reference.md` and other affected guides;
 - confirm no secret or real tenant data appears in the diff or git history;
 - explain compatibility impact and whether the change is breaking;
 - disclose AI assistance and identify the human reviewer when applicable;
 - confirm the diff contains no Unicode em dash characters;
 - keep unrelated formatting and refactors out of the pull request.
+
+Apply the narrowest release-note label before merge. GitHub uses that label and
+the pull-request author to generate categorized release notes and contributor
+credit. Maintainers follow the guarded process in
+[`docs/releasing.md`](docs/releasing.md).
 
 ## Security reports
 

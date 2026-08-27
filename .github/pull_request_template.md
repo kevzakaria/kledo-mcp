@@ -23,3 +23,4 @@ and backward compatibility.
 - [ ] The diff contains no credentials, real tenant data, private identifiers, or local paths.
 - [ ] The diff and pull request text contain no Unicode em dash characters.
 - [ ] Documentation and capability tables are updated when behavior changes.
+- [ ] The narrowest release-note label is applied, or `skip-changelog` explains why no note is needed.
