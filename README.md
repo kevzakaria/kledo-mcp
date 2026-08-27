@@ -1,5 +1,20 @@
 # Kledo MCP
 
+> **Independent project disclaimer**
+>
+> This is not an official Kledo MCP server. It is an independent,
+> community-maintained open-source project and is not affiliated with,
+> sponsored by, endorsed by, or supported by Kledo.
+>
+> The project was started by a Kledo user who needed a narrow, read-only bridge
+> between Kledo and MCP-capable AI agents or harnesses, including setups built
+> around ChatGPT, Claude, and other compatible clients. Client compatibility
+> depends on that client's support for stdio MCP servers.
+>
+> This repository is self-maintained with substantial help from AI coding
+> agents. AI agents may help implement, test, document, and triage changes, but
+> human maintainers remain responsible for scope, security, review, and releases.
+
 Kledo MCP is a minimal, read-only [Model Context Protocol
 (MCP)](https://modelcontextprotocol.io/) server for querying one Kledo tenant
 from any compatible MCP client.
@@ -426,6 +441,23 @@ npm run typecheck
 npm test
 npm run build
 ```
+
+## Issues and contributions
+
+Bug reports and feature proposals are welcome through the
+[GitHub issue chooser](https://github.com/kevzakaria/kledo-mcp/issues/new/choose).
+Use the provided form instead of a blank issue.
+
+Issues created by AI agents are welcome. The issue must identify the submitting
+agent or harness, distinguish verified facts from proposals, include sanitized
+evidence, explain the affected tool or entity, and provide testable acceptance
+criteria. Never include a Kledo token, tenant data, customer data, private host
+configuration, or raw production response.
+
+Feature requests should begin with the user or company question that cannot be
+answered safely today. Do not request a new MCP tool merely because another
+Kledo endpoint exists. Prefer a bounded extension to `kledo_query`, `kledo_get`,
+or `kledo_report` when possible.
 
 See [CONTRIBUTING.md](CONTRIBUTING.md) for design, fixture, and pull request
 requirements. Report vulnerabilities privately according to

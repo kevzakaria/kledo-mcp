@@ -1,0 +1,119 @@
+name: Feature request
+description: Propose a bounded, read-only capability based on a concrete user need.
+title: "[Feature]: "
+labels: []
+assignees: []
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Start with the question a user or company needs answered. Do not request a new MCP tool only because a Kledo endpoint exists.
+
+  - type: dropdown
+    id: submitter_type
+    attributes:
+      label: Submitter type
+      options:
+        - Human
+        - AI agent with human review
+        - AI agent without human review
+    validations:
+      required: true
+
+  - type: input
+    id: agent_and_reviewer
+    attributes:
+      label: Agent, harness, and human reviewer
+      description: Name the AI agent or harness and the human reviewer. Write not applicable or none when needed.
+      placeholder: "Agent: Claude; harness: local agent; reviewer: @username"
+    validations:
+      required: true
+
+  - type: input
+    id: version
+    attributes:
+      label: Repository version or commit reviewed
+      placeholder: "0.1.0 or a full git commit SHA"
+    validations:
+      required: true
+
+  - type: textarea
+    id: user_question
+    attributes:
+      label: User or company question
+      description: Give one concrete question that cannot be answered safely with the current contract.
+      placeholder: "Example: Which direct invoice payment events occurred during a period?"
+    validations:
+      required: true
+
+  - type: dropdown
+    id: existing_tool
+    attributes:
+      label: Best existing tool to extend
+      options:
+        - kledo_query
+        - kledo_get
+        - kledo_report
+        - none, with justification below
+    validations:
+      required: true
+
+  - type: textarea
+    id: current_gap
+    attributes:
+      label: Current contract gap
+      description: Explain why the existing tool cannot express the need safely today.
+    validations:
+      required: true
+
+  - type: textarea
+    id: evidence
+    attributes:
+      label: Endpoint and response evidence
+      description: Cite public Kledo documentation or describe a sanitized probe. Mark facts as verified, proposed, or unverified.
+    validations:
+      required: true
+
+  - type: textarea
+    id: proposed_contract
+    attributes:
+      label: Proposed MCP contract
+      description: Describe inputs, normalized outputs, bounds, pagination, truncation, errors, and warnings. Do not propose raw passthrough access.
+    validations:
+      required: true
+
+  - type: textarea
+    id: safety_and_compatibility
+    attributes:
+      label: Safety, privacy, and compatibility
+      description: Cover read-only behavior, tenant isolation, sensitive data, untrusted text, backward compatibility, and failure behavior.
+    validations:
+      required: true
+
+  - type: textarea
+    id: acceptance
+    attributes:
+      label: Acceptance criteria
+      description: Provide testable behavior and required contract, fixture, and security tests.
+      placeholder: |
+        - [ ] The tool returns ...
+        - [ ] Pagination or truncation is explicit ...
+        - [ ] Synthetic fixtures cover ...
+    validations:
+      required: true
+
+  - type: checkboxes
+    id: safety
+    attributes:
+      label: Submission checklist
+      options:
+        - label: I checked whether one of the existing three tools can be extended instead of adding a fourth tool.
+          required: true
+        - label: I removed tokens, tenant data, customer data, real invoice details, private URLs, and local paths.
+          required: true
+        - label: I separated verified facts from proposals and unverified assumptions.
+          required: true
+        - label: I used no Unicode em dash characters.
+          required: true
+        - label: This request covers one capability only.
+          required: true

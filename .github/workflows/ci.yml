@@ -81,6 +81,15 @@ jobs:
             fi
           done
 
+          if git grep -n $'\u2014'; then
+            echo 'Unicode em dash characters are not allowed in tracked files.' >&2
+            exit 1
+          fi
+          if printf '%s\n' "$PULL_REQUEST_TEXT" | grep -q $'\u2014'; then
+            echo 'Unicode em dash characters are not allowed in pull-request metadata.' >&2
+            exit 1
+          fi
+
       - name: Set up Node.js
         uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
         with:

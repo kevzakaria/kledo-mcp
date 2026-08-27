@@ -1,7 +1,7 @@
 {
   "name": "kledo-mcp",
   "version": "0.1.0",
-  "description": "Minimal read-only MCP server for Kledo",
+  "description": "Independent, minimal read-only MCP server for Kledo",
   "mcpName": "io.github.kevzakaria/kledo-mcp",
   "type": "module",
   "license": "Apache-2.0",

@@ -2,7 +2,7 @@
   "$schema": "https://static.modelcontextprotocol.io/schemas/2025-12-11/server.schema.json",
   "name": "io.github.kevzakaria/kledo-mcp",
   "title": "Kledo MCP",
-  "description": "Read-only access to normalized Kledo accounting data through three bounded MCP tools.",
+  "description": "Independent read-only access to normalized Kledo accounting data through three bounded MCP tools.",
   "repository": {
     "url": "https://github.com/kevzakaria/kledo-mcp",
     "source": "github",

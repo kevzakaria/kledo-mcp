@@ -1,0 +1,128 @@
+name: Bug report
+description: Report reproducible incorrect or unsafe behavior in Kledo MCP.
+title: "[Bug]: "
+labels: []
+assignees: []
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for reporting a bug. Remove all credentials and real tenant data. Security vulnerabilities belong in a private GitHub Security Advisory.
+
+  - type: dropdown
+    id: submitter_type
+    attributes:
+      label: Submitter type
+      options:
+        - Human
+        - AI agent with human review
+        - AI agent without human review
+    validations:
+      required: true
+
+  - type: input
+    id: agent_and_reviewer
+    attributes:
+      label: Agent, harness, and human reviewer
+      description: Name the AI agent or harness and the human reviewer. Write not applicable or none when needed.
+      placeholder: "Agent: Codex; harness: local CLI; reviewer: @username"
+    validations:
+      required: true
+
+  - type: input
+    id: version
+    attributes:
+      label: Tested version or commit
+      placeholder: "0.1.0 or a full git commit SHA"
+    validations:
+      required: true
+
+  - type: input
+    id: client
+    attributes:
+      label: MCP client and environment
+      description: Include the client, stdio transport, Node version, and operating system. Do not include private paths.
+      placeholder: "Claude Desktop, stdio, Node 22.19, macOS"
+    validations:
+      required: true
+
+  - type: dropdown
+    id: affected_area
+    attributes:
+      label: Affected area
+      options:
+        - kledo_query
+        - kledo_get
+        - kledo_report
+        - stdio transport or MCP negotiation
+        - configuration or secret injection
+        - documentation or packaging
+        - other
+    validations:
+      required: true
+
+  - type: textarea
+    id: summary
+    attributes:
+      label: Problem
+      description: Describe one user-facing accounting, safety, or interoperability problem.
+    validations:
+      required: true
+
+  - type: textarea
+    id: reproduction
+    attributes:
+      label: Minimal reproduction
+      description: Provide ordered steps using synthetic or irreversibly sanitized data.
+      placeholder: |
+        1. Configure a fixture tenant response with ...
+        2. Call kledo_query with ...
+        3. Observe ...
+    validations:
+      required: true
+
+  - type: textarea
+    id: expected
+    attributes:
+      label: Expected behavior
+    validations:
+      required: true
+
+  - type: textarea
+    id: actual
+    attributes:
+      label: Actual behavior
+    validations:
+      required: true
+
+  - type: textarea
+    id: evidence
+    attributes:
+      label: Sanitized evidence
+      description: Add safe logs, fixture snippets, or public documentation. State whether each claim is verified, proposed, or unverified.
+      render: text
+
+  - type: textarea
+    id: acceptance
+    attributes:
+      label: Acceptance criteria
+      description: List observable behavior and the contract or fixture tests that should pass.
+      placeholder: |
+        - [ ] The reproduction returns ...
+        - [ ] A regression test covers ...
+    validations:
+      required: true
+
+  - type: checkboxes
+    id: safety
+    attributes:
+      label: Safety checklist
+      options:
+        - label: I removed tokens, tenant data, customer data, real invoice details, private URLs, and local paths.
+          required: true
+        - label: This is not a public disclosure of a security vulnerability.
+          required: true
+        - label: I used no Unicode em dash characters.
+          required: true
+        - label: This issue covers one problem only.
+          required: true
