@@ -19,6 +19,14 @@ function align(left: DecimalParts, right: DecimalParts): [bigint, bigint] {
   return [leftValue, rightValue]
 }
 
+function decimalFromParts(coefficient: bigint, scale: number): string {
+  const negative = coefficient < 0n
+  const digits = (negative ? -coefficient : coefficient).toString().padStart(scale + 1, '0')
+  const sign = negative ? '-' : ''
+  if (scale === 0) return `${sign}${digits}`
+  return `${sign}${digits.slice(0, -scale)}.${digits.slice(-scale)}`
+}
+
 export function decimalString(value: string | number): string {
   const normalized = typeof value === 'number' ? String(value) : value.trim()
   decimalParts(normalized)
@@ -30,4 +38,12 @@ export function compareDecimals(left: string, right: string): -1 | 0 | 1 {
   if (leftValue < rightValue) return -1
   if (leftValue > rightValue) return 1
   return 0
+}
+
+export function addDecimals(left: string, right: string): string {
+  const leftParts = decimalParts(left)
+  const rightParts = decimalParts(right)
+  const scale = Math.max(leftParts.scale, rightParts.scale)
+  const [leftValue, rightValue] = align(leftParts, rightParts)
+  return decimalFromParts(leftValue + rightValue, scale)
 }

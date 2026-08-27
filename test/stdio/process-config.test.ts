@@ -15,6 +15,25 @@ describe('Kledo process configuration', () => {
     expect(config.identityCatalogPath).toBe(
       join('/private/kledo-mcp-state', 'identity-catalog.sqlite'),
     )
+    expect(config.debug).toBe(false)
+  })
+
+  it('enables only the explicit sanitized debug mode', () => {
+    const config = loadKledoProcessConfig({
+      KLEDO_API_BASE_URL: 'https://tenant.example/api/v1/',
+      KLEDO_API_TOKEN: 'fixture-secret',
+      KLEDO_STATE_DIR: '/private/kledo-mcp-state',
+      KLEDO_DEBUG: '1',
+    })
+
+    expect(config.debug).toBe(true)
+    expect(() =>
+      loadKledoProcessConfig({
+        KLEDO_API_BASE_URL: 'https://tenant.example/api/v1/',
+        KLEDO_API_TOKEN: 'fixture-secret',
+        KLEDO_DEBUG: 'verbose',
+      }),
+    ).toThrow('KLEDO_DEBUG must be 0 or 1')
   })
 
   it('rejects a relative local state directory', () => {

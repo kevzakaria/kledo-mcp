@@ -13,6 +13,7 @@ export type KledoErrorCode =
   | 'SCHEMA_MISMATCH'
   | 'INVALID_CURSOR'
   | 'INVALID_ARGUMENT'
+  | 'AMBIGUOUS'
   | 'UNSUPPORTED_OPERATION'
   | 'INTERNAL_ERROR'
 

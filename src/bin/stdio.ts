@@ -9,7 +9,16 @@ import { createKledoStdioTransport } from '../server/stdio-transport.js'
 
 try {
   const config = loadKledoProcessConfig()
-  const gateway = createKledoHttpGateway(config)
+  const gateway = createKledoHttpGateway({
+    ...config,
+    ...(config.debug
+      ? {
+          diagnostic: ({ event }) => {
+            process.stderr.write(`[kledo-debug] ${event}\n`)
+          },
+        }
+      : {}),
+  })
   const handle = serveStdio(() => createKledoMcpServer({ gateway }), {
     legacy: 'serve',
     transport: createKledoStdioTransport(),

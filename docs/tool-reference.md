@@ -30,9 +30,90 @@ and non-IP child transaction types remain outside this include.
 
 ## `kledo_report`
 
-Runs one allowlisted native Kledo financial or operational report. Accounting
-statements come from Kledo's report endpoints and are not reconstructed from an
-incomplete invoice page.
+Runs one allowlisted native Kledo financial or operational report, or one
+explicitly validated semantic adapter. Accounting statements come from Kledo's
+report endpoints and are not reconstructed from an incomplete invoice page.
+
+Use `sales_by_person` for sales grouped by salesperson or filtered to one
+salesperson. It calls Kledo's native `salesPerPerson` report, defaults to
+`trans_date`, and uses `shipping_date` only when explicitly requested. A caller
+may supply either `salesPersonId` or `salesPersonName`, never both. Exact name
+resolution is trimmed and case-insensitive. It uses `/users` on a cold bounded
+cache, retaining at most 1,000 sanitized ID/name pairs for five minutes by
+default. Fresh mappings are persisted in tenant-scoped local SQLite so they can
+be reused after a process restart. The catalog never stores user email
+addresses, tokens, raw responses, or transaction data. Kledo currently returns
+this report as a flat array. The adapter validates and locally paginates that
+array, maps `total_amount_after_tax` to sales money, exposes `total_count` as
+`salesCount` rather than product quantity, and returns the reported commission
+as a separate money value.
+
+Use `sales_order_kpi` for Sales Order deal intake over an inclusive
+transaction-date period, optionally filtered by exact salesperson ID or name.
+It fixes transaction type to Sales Order (`6`) and the booked status set to
+Open (`5`), Partially Shipped (`6`), and Closed (`7`). Waiting Approval and
+Rejected orders are excluded.
+
+The adapter consumes every `/finance/orders` page, validates every row remains
+inside the requested type, status, date, and salesperson scope, and adds each
+page's `grand_subtotal` with exact decimal arithmetic. It returns Order Count,
+Ordered Quantity, Net Booked Order Value, Gross Booked Order Value, and Open
+Order Backlog. The field-to-aggregate mapping and all-pages scope are explicit
+in `provenance`. Booked values are order intake, not accounting revenue,
+invoice value, receivable, or collected cash.
+
+Use `income_by_customer` only when the grouping or ranking dimension is the
+customer, even if the report is filtered by a salesperson. Use
+`sales_by_period` only for day, month, or year time buckets. Salesperson totals
+must not be reconstructed by crawling invoices.
+
+Use `dormant_customers` for a bounded, read-only follow-up candidate list. The
+adapter compares two complete pagesets from Kledo's native Income per Customer
+report: a historical eligibility period and the following inactivity period
+through `asOf`. `inactiveDays` defaults to 90, `historyDays` defaults to 365,
+and `pageSize` defaults to 20. A candidate had observed historical income but
+no observed income during the inactivity period. Results are ranked by
+historical income and paginated locally with a signed cursor.
+
+This is deliberately called dormancy rather than churn. The source does not
+provide an exact last-transaction date, active/archive status, outreach
+consent, or evidence that the relationship ended. Those facts must be reviewed
+before a human follows up. Contacts whose only activity predates the bounded
+historical period are outside the analysis, not classified as dormant.
+
+Use `receivable_by_invoice` when the answer needs the customer, invoice number,
+and project/reference behind each outstanding receivable. It first reads
+Kledo's native Aged Receivable customer page, then fully consumes the
+`agedReceivableDetail` pages for every customer returned on that page. The
+adapter validates customer identity and customer totals across both sources.
+
+`asOf` is required. `pageSize` controls customers, defaults to 10, and is capped
+at 20 because every customer has a bounded detail fan-out. Follow
+`pageInfo.nextCursor` before presenting a company-wide list. Filters such as
+warehouse or salesperson are intentionally unsupported: Kledo's verified Web
+UI detail route does not preserve them from the customer summary screen.
+
+Each invoice returns `invoiceNumber`, dates, invoice amount, outstanding amount,
+and `projectReference`. The latter is the upstream API `memo`; Kledo displays
+that same value as **Reference** in the Aged Receivable Detail Web UI. Source
+families and this field mapping are explicit in `provenance`. Contact email,
+phone, address, tax ID, and raw contact payloads are never returned.
+
+Use `item_price_analysis` for one product's pricing and gross-margin facts. It
+requires an explicit `period` plus exactly one of `productCode` or
+`productName`. Product code is matched exactly and case-insensitively. A name
+may be used only when Kledo resolves it to one safe product; multiple name
+matches fail with `AMBIGUOUS` and the caller must retry with the exact SKU.
+
+The result deliberately separates configured catalog sale/base-purchase prices
+and average inventory cost from latest sold/purchased transaction prices and
+from period profitability. The purchase date is returned only when the latest
+purchase price is corroborated by the newest Purchase Invoice product rows.
+Profitability includes period sales, HPP, gross profit, gross margin, average
+sale price, and average HPP. `profitabilityMethod` defaults to `inventory`; set
+`non_inventory` or `package` explicitly for those Kledo calculation modes. The
+six source endpoint families are named in `provenance` so an answer remains
+inspectable.
 
 ## Entity catalog
 
@@ -60,12 +141,17 @@ incomplete invoice page.
 - `profit_loss`
 - `cash_flow`
 - `aged_receivable`
+- `receivable_by_invoice`
 - `aged_payable`
 - `bank_summary`
 - `sales_by_period`
+- `sales_by_person`
+- `sales_order_kpi`
 - `purchases_by_period`
 - `sales_by_product`
 - `income_by_customer`
+- `dormant_customers`
+- `item_price_analysis`
 
 ## Example questions
 
@@ -78,7 +164,13 @@ The MCP client chooses a tool. Users do not need to know Kledo endpoint names.
 | "Show the line items for invoice ID 123." | `kledo_get` |
 | "List direct payment events and destination accounts for invoice ID 123." | `kledo_get` with `invoice_payments` |
 | "What is the aged receivable position as of today?" | `kledo_report` |
+| "Which customers owe us, which invoices, and what project is each invoice for?" | `kledo_report` with `receivable_by_invoice` |
 | "Compare sales this month with last month." | `kledo_report` |
+| "How much did a salesperson sell in July?" | `kledo_report` with `sales_by_person` |
+| "How many deals did a salesperson book in August, and what was their value?" | `kledo_report` with `sales_order_kpi` |
+| "Which customers bought the most from a salesperson?" | `kledo_report` with `income_by_customer` |
+| "Which old customers should we review for follow-up?" | `kledo_report` with `dormant_customers` |
+| "What are the catalog, latest sold, latest purchased, and period-margin values for exact SKU PAINT-001?" | `kledo_report` with `item_price_analysis` |
 
 Tool results include fetch time, completeness, warnings, pagination state, and
 normalized values. The model should disclose truncation or incomplete pages
@@ -100,15 +192,23 @@ Version `0.1.0` implements the complete catalog above:
   from the detail schema because Kledo exposes no unit detail GET;
 - transaction documents support bounded `line_items` and directly present
   `relation_ids` without recursive graph requests;
-- sales invoice detail can include bounded, deduplicated `invoice_payments` from
-  Kledo's child-transactions endpoint. Unexpected type, parent, account, or row
-  shapes fail safely;
-- `kledo_report` routes all 11 reports to native Kledo report endpoints;
+- `kledo_report` routes 12 native reports plus the `sales_order_kpi`,
+  `dormant_customers`, `receivable_by_invoice`, and `item_price_analysis`
+  semantic adapters;
 - paginated reports return signed cursors and non-paginated statements are never
   reconstructed from transaction pages; and
 - normalized records minimize contact PII and represent IDs and record-level
   money as decimal strings.
 
-Native report payloads remain Kledo-shaped JSON because the public OpenAPI
-document does not define their internal rows. See [architecture](architecture.md)
-for normalization, framing, and failure behavior.
+Most native report payloads remain Kledo-shaped JSON because the public OpenAPI
+document does not define their internal rows. `sales_by_person`,
+`sales_order_kpi`, `dormant_customers`, `receivable_by_invoice`, and `item_price_analysis` are
+strictly validated adapters.
+The dormancy adapter fully consumes two bounded `incomePerCustomer` windows,
+subtracts recent customer IDs from the historical set, and returns normalized
+candidates without inventing a last purchase date. The receivable adapter joins
+native customer totals to fully consumed invoice drill-down pages while keeping
+pagination visible. The item adapter resolves a single product before fetching
+its distinct price and profitability sources. See
+[architecture](architecture.md) for normalization, framing, and failure
+behavior.

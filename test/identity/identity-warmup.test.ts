@@ -21,7 +21,7 @@ describe('Kledo identity warm-up', () => {
     )
   })
 
-  it('fetches and stores sanitized tenant reference catalogs', async () => {
+  it('fetches sanitized reference catalogs and keeps salesperson routing warm after restart', async () => {
     const requestedUrls: string[] = []
     const upstream = createServer((request, response) => {
       requestedUrls.push(request.url ?? '')
@@ -357,5 +357,25 @@ describe('Kledo identity warm-up', () => {
     expect(databaseBytes.includes(Buffer.from('private-balance'))).toBe(false)
     expect(databaseBytes.includes(Buffer.from('fixture-secret'))).toBe(false)
 
+    const restartedGateway = createKledoHttpGateway(gatewayOptions)
+    await restartedGateway.report({
+      report: 'sales_by_person',
+      period: { from: '2026-07-01', to: '2026-07-31' },
+      dateBasis: 'trans_date',
+      salesPersonName: 'warm seller',
+      pageSize: 20,
+    })
+    expect(requestedUrls).toEqual([
+      '/api/v1/users',
+      '/api/v1/finance/contacts?per_page=100&page=1',
+      '/api/v1/finance/contacts?per_page=100&page=2',
+      '/api/v1/finance/contactGroups',
+      '/api/v1/finance/products?per_page=100&page=1',
+      '/api/v1/finance/productCategories',
+      '/api/v1/finance/warehouses',
+      '/api/v1/finance/units?per_page=100&page=1',
+      '/api/v1/finance/accounts?per_page=100&page=1',
+      '/api/v1/reportings/salesPerPerson?date_from=2026-07-01&date_to=2026-07-31&date_filter=trans_date&sales_id=7',
+    ])
   })
 })

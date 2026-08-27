@@ -206,6 +206,126 @@ describe('public MCP input validation', () => {
     ).toBe(true)
   })
 
+  it('defaults and bounds dormant-customer analysis windows', () => {
+    expect(
+      kledoReportInputSchema.parse({
+        report: 'dormant_customers',
+        asOf: '2026-08-27',
+      }),
+    ).toEqual({
+      report: 'dormant_customers',
+      asOf: '2026-08-27',
+      inactiveDays: 90,
+      historyDays: 365,
+      pageSize: 20,
+    })
+
+    for (const input of [
+      { report: 'dormant_customers', asOf: '2026-02-29' },
+      { report: 'dormant_customers', asOf: '2026-08-27', inactiveDays: 0 },
+      { report: 'dormant_customers', asOf: '2026-08-27', historyDays: 3651 },
+    ]) {
+      expect(kledoReportInputSchema.safeParse(input).success).toBe(false)
+    }
+  })
+
+  it('requires one exact product selector and a period for item price analysis', () => {
+    expect(
+      kledoReportInputSchema.parse({
+        report: 'item_price_analysis',
+        productCode: 'PAINT-001',
+        period: { from: '2026-08-01', to: '2026-08-31' },
+      }),
+    ).toEqual({
+      report: 'item_price_analysis',
+      productCode: 'PAINT-001',
+      period: { from: '2026-08-01', to: '2026-08-31' },
+      profitabilityMethod: 'inventory',
+    })
+
+    for (const input of [
+      {
+        report: 'item_price_analysis',
+        period: { from: '2026-08-01', to: '2026-08-31' },
+      },
+      {
+        report: 'item_price_analysis',
+        productCode: 'PAINT-001',
+        productName: 'Fixture Paint',
+        period: { from: '2026-08-01', to: '2026-08-31' },
+      },
+      { report: 'item_price_analysis', productCode: 'PAINT-001' },
+      {
+        report: 'item_price_analysis',
+        productName: 'Fixture Paint',
+        period: { from: '2026-08-31', to: '2026-08-01' },
+      },
+    ]) {
+      expect(kledoReportInputSchema.safeParse(input).success).toBe(false)
+    }
+  })
+
+  it('defaults and bounds customer fan-out for receivable invoice details', () => {
+    expect(
+      kledoReportInputSchema.parse({
+        report: 'receivable_by_invoice',
+        asOf: '2026-08-27',
+      }),
+    ).toEqual({
+      report: 'receivable_by_invoice',
+      asOf: '2026-08-27',
+      pageSize: 10,
+    })
+
+    for (const input of [
+      { report: 'receivable_by_invoice', asOf: '2026-02-29' },
+      { report: 'receivable_by_invoice', asOf: '2026-08-27', pageSize: 0 },
+      { report: 'receivable_by_invoice', asOf: '2026-08-27', pageSize: 21 },
+      {
+        report: 'receivable_by_invoice',
+        asOf: '2026-08-27',
+        warehouseIds: ['2'],
+      },
+    ]) {
+      expect(kledoReportInputSchema.safeParse(input).success).toBe(false)
+    }
+  })
+
+  it('requires a bounded period and one optional salesperson selector for Sales Order KPI', () => {
+    expect(
+      kledoReportInputSchema.parse({
+        report: 'sales_order_kpi',
+        period: { from: '2026-08-01', to: '2026-08-31' },
+        salesPersonName: 'Fixture Seller',
+      }),
+    ).toEqual({
+      report: 'sales_order_kpi',
+      period: { from: '2026-08-01', to: '2026-08-31' },
+      salesPersonName: 'Fixture Seller',
+    })
+
+    for (const input of [
+      { report: 'sales_order_kpi' },
+      {
+        report: 'sales_order_kpi',
+        period: { from: '2026-08-31', to: '2026-08-01' },
+      },
+      {
+        report: 'sales_order_kpi',
+        period: { from: '2026-08-01', to: '2026-08-31' },
+        salesPersonId: '7',
+        salesPersonName: 'Fixture Seller',
+      },
+      {
+        report: 'sales_order_kpi',
+        period: { from: '2026-08-01', to: '2026-08-31' },
+        cursor: 'not-supported',
+      },
+    ]) {
+      expect(kledoReportInputSchema.safeParse(input).success).toBe(false)
+    }
+  })
+
   it('rejects invalid or reversed query date ranges before building an upstream URL', () => {
     for (const value of [
       { from: '2026-08-31', to: '2026-08-01' },

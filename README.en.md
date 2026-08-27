@@ -109,15 +109,28 @@ reads `KLEDO_API_BASE_URL`, `KLEDO_API_TOKEN`, and the optional
 | --- | --- |
 | `kledo_query` | Search or page through an allowlisted Kledo entity |
 | `kledo_get` | Retrieve one normalized record and bounded relationships |
-| `kledo_report` | Run an allowlisted native Kledo report |
+| `kledo_report` | Run an allowlisted native report or read-only semantic analysis |
 
 I do not expose tools that create or modify records, switch tenants during a
 call, send messages, export files, or issue arbitrary HTTP requests. Read the
 [tool reference](docs/tool-reference.md) for supported entities, reports,
 examples, and current implementation status.
 
-Sanitized master-reference mappings are stored in a tenant-scoped local SQLite catalog. Run `npm run warmup` to prefetch them without adding another MCP tool.
-
+For salesperson sales questions, `kledo_report` uses `sales_by_person`.
+`sales_order_kpi` fully aggregates bounded Sales Order intake for an optional
+salesperson; booked value is not revenue, invoice value, or cash.
+`income_by_customer` remains customer-grouped, while `sales_by_period` is only
+for time buckets. `dormant_customers` finds bounded human follow-up candidates
+with historical income activity that is absent from the recent window; it is
+not proof of churn and never sends a message. `receivable_by_invoice` returns
+customer and invoice-level receivables while mapping API `memo` to the Web UI
+Reference/project field. `item_price_analysis` keeps
+catalog settings, latest transaction prices, and period profitability separate
+for one product; multiple name matches require an exact SKU. Sanitized
+master-reference mappings are kept in a tenant-scoped local SQLite catalog.
+Later processes can route salesperson reports by ID without reloading `/users`
+while that snapshot is fresh; other kinds are ready for later semantic routing. Run
+`npm run warmup` to prefetch them without adding another MCP tool.
 ## Documentation## Documentation
 
 | Guide | Contents |

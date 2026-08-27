@@ -2,7 +2,7 @@ import { createHmac, timingSafeEqual } from 'node:crypto'
 
 import { z } from 'zod'
 
-import { compareDecimals, decimalString } from '../domain/decimal.js'
+import { addDecimals, compareDecimals, decimalString } from '../domain/decimal.js'
 import type { JsonValue } from '../domain/json.js'
 import {
   createSqliteTenantIdentityCatalog,
@@ -35,7 +35,11 @@ import type {
   KledoReportInput,
   KledoReportOutput,
 } from '../tools/schemas.js'
-import { invoicePaymentOutputSchema, jsonValueSchema } from '../tools/schemas.js'
+import {
+  invoicePaymentOutputSchema,
+  jsonValueSchema,
+  kledoReportOutputSchema,
+} from '../tools/schemas.js'
 
 const rawContactSchema = z
   .object({
@@ -194,6 +198,150 @@ const rawNativeReportPageEnvelopeSchema = z.object({
   }),
 })
 
+const rawAgedReceivableDueSchema = z
+  .object({
+    '-3': decimalSchema,
+    '-2': decimalSchema,
+    '-1': decimalSchema,
+    '0': decimalSchema,
+    '1': decimalSchema,
+    '2': decimalSchema,
+    '3': decimalSchema,
+    '4': decimalSchema,
+  })
+  .strict()
+
+const rawAgedReceivableSummaryDueSchema = rawAgedReceivableDueSchema.omit({ '-3': true })
+
+const rawAgedReceivableCustomerSchema = z
+  .object({
+    id: exactIdSchema.refine((value) => /^[1-9]\d{0,19}$/.test(String(value))),
+    name: z.string().nullable().optional(),
+    company: z.string().nullable().optional(),
+    due: rawAgedReceivableSummaryDueSchema,
+  })
+  .passthrough()
+
+const rawAgedReceivablePageEnvelopeSchema = z
+  .object({
+    success: z.literal(true),
+    data: z
+      .object({
+        current_page: z.number().int().positive(),
+        last_page: z.number().int().positive(),
+        per_page: z.number().int().positive(),
+        total: z.number().int().nonnegative(),
+        data: z.array(rawAgedReceivableCustomerSchema),
+      })
+      .passthrough(),
+  })
+  .passthrough()
+
+const rawAgedReceivableInvoiceSchema = z
+  .object({
+    id: exactIdSchema.refine((value) => /^[1-9]\d{0,19}$/.test(String(value))),
+    trans_date: z.string().date(),
+    due_date: z.string().date().nullable(),
+    ref_number: z.string().trim().min(1),
+    memo: z.string().nullable(),
+    due: rawAgedReceivableDueSchema,
+    age_due: z.number().int().safe(),
+    age_trans: z.number().int().safe(),
+  })
+  .passthrough()
+
+const rawAgedReceivableDetailEnvelopeSchema = z
+  .object({
+    success: z.literal(true),
+    data: z
+      .object({
+        current_page: z.number().int().positive(),
+        last_page: z.number().int().positive(),
+        per_page: z.number().int().positive(),
+        total: z.number().int().nonnegative(),
+        total_due: rawAgedReceivableDueSchema,
+        contact: rawContactSchema,
+        data: z.array(rawAgedReceivableInvoiceSchema),
+      })
+      .passthrough(),
+  })
+  .passthrough()
+
+const rawSalesByPersonRowSchema = z
+  .object({
+    sales_id: exactIdSchema.refine((value) => /^[1-9]\d{0,19}$/.test(String(value))),
+    sales: z
+      .object({
+        id: exactIdSchema.refine((value) => /^[1-9]\d{0,19}$/.test(String(value))),
+        name: z.string().trim().min(1),
+      })
+      .passthrough(),
+    total_amount_after_tax: decimalSchema,
+    total_count: z.number().int().nonnegative().max(Number.MAX_SAFE_INTEGER),
+    total_commission: decimalSchema,
+  })
+  .passthrough()
+
+const rawSalesByPersonEnvelopeSchema = z.object({
+  success: z.literal(true),
+  data: z.array(rawSalesByPersonRowSchema),
+})
+
+const rawSalesOrderKpiRowSchema = z
+  .object({
+    id: exactIdSchema.refine((value) => /^[1-9]\d{0,19}$/.test(String(value))),
+    trans_type_id: exactIdSchema,
+    trans_date: z.string().date(),
+    status_id: exactIdSchema,
+    sales_id: exactIdSchema.nullable().optional(),
+  })
+  .passthrough()
+
+const rawSalesOrderPageAggregateSchema = z
+  .object({
+    qty: decimalSchema,
+    amount: decimalSchema,
+    amount_after_tax: decimalSchema,
+    unbilled_amount: decimalSchema,
+  })
+  .passthrough()
+
+const rawSalesOrderKpiPageEnvelopeSchema = z
+  .object({
+    success: z.literal(true),
+    data: z
+      .object({
+        current_page: z.number().int().positive(),
+        last_page: z.number().int().positive(),
+        per_page: z.number().int().positive(),
+        total: z.number().int().nonnegative(),
+        data: z.array(rawSalesOrderKpiRowSchema),
+        grand_subtotal: rawSalesOrderPageAggregateSchema,
+      })
+      .passthrough(),
+  })
+  .passthrough()
+
+const rawIncomePerCustomerRowSchema = z
+  .object({
+    contact_id: exactIdSchema.refine((value) => /^[1-9]\d{0,19}$/.test(String(value))),
+    amount: decimalSchema,
+    total_transactions: z.number().int().positive().max(Number.MAX_SAFE_INTEGER),
+    contact: rawContactSchema,
+  })
+  .passthrough()
+
+const rawIncomePerCustomerPageEnvelopeSchema = z.object({
+  success: z.literal(true),
+  data: z.object({
+    current_page: z.number().int().positive(),
+    last_page: z.number().int().positive(),
+    per_page: z.number().int().positive(),
+    total: z.number().int().nonnegative(),
+    data: z.array(rawIncomePerCustomerRowSchema),
+  }),
+})
+
 const rawKledoUserSchema = z
   .object({
     id: exactIdSchema.refine((value) => /^[1-9]\d{0,19}$/.test(String(value))),
@@ -232,6 +380,118 @@ const rawIdentityNamedRecordSchema = z
     deleted_at: z.unknown().nullable().optional(),
   })
   .passthrough()
+
+const rawProductIdentitySchema = z
+  .object({
+    id: exactIdSchema.refine((value) => /^[1-9]\d{0,19}$/.test(String(value))),
+    code: z.string().trim().min(1).nullable().optional(),
+    name: z.string().trim().min(1),
+    is_archive: z.union([z.boolean(), z.literal(0), z.literal(1)]).nullable().optional(),
+  })
+  .passthrough()
+
+const rawProductPriceDetailSchema = z
+  .object({
+    id: exactIdSchema.refine((value) => /^[1-9]\d{0,19}$/.test(String(value))),
+    code: z.string().trim().min(1).nullable().optional(),
+    name: z.string().trim().min(1),
+    price: decimalSchema.nullable().optional(),
+    base_price: decimalSchema.nullable().optional(),
+    avg_base_price: decimalSchema.nullable().optional(),
+    is_sell: z.union([z.boolean(), z.literal(0), z.literal(1)]).nullable().optional(),
+    is_purchase: z.union([z.boolean(), z.literal(0), z.literal(1)]).nullable().optional(),
+    is_track: z.union([z.boolean(), z.literal(0), z.literal(1)]).nullable().optional(),
+    unit: z
+      .object({
+        id: exactIdSchema.refine((value) => /^[1-9]\d{0,19}$/.test(String(value))),
+        name: z.string().trim().min(1),
+      })
+      .passthrough()
+      .nullable()
+      .optional(),
+    last_sale_transaction: z
+      .object({ trans_date: z.string().date() })
+      .passthrough()
+      .nullable()
+      .optional(),
+  })
+  .passthrough()
+
+const rawProductPriceDetailEnvelopeSchema = z.object({
+  success: z.literal(true),
+  data: rawProductPriceDetailSchema,
+})
+
+const rawLatestSellPriceSchema = z
+  .object({
+    id: exactIdSchema.refine((value) => /^[1-9]\d{0,19}$/.test(String(value))),
+    last_sell_price: decimalSchema.nullable(),
+  })
+  .passthrough()
+
+const rawLatestSellPriceEnvelopeSchema = z.object({
+  success: z.literal(true),
+  data: z.array(rawLatestSellPriceSchema),
+})
+
+const rawLatestPurchasePriceSchema = z
+  .object({
+    last_buy_price: decimalSchema.nullable(),
+  })
+  .passthrough()
+
+const rawLatestPurchasePriceEnvelopeSchema = z.object({
+  success: z.literal(true),
+  data: z.record(z.string().regex(/^[1-9]\d{0,19}$/), rawLatestPurchasePriceSchema),
+})
+
+const rawProductPurchaseTransactionSchema = z
+  .object({
+    id: exactIdSchema.refine((value) => /^[1-9]\d{0,19}$/.test(String(value))),
+    trans_type_id: exactIdSchema.refine((value) => /^[1-9]\d{0,19}$/.test(String(value))),
+    trans_date: z.string().date(),
+    price: decimalSchema.nullable(),
+  })
+  .passthrough()
+
+const rawProductPurchaseTransactionsEnvelopeSchema = z.object({
+  success: z.literal(true),
+  data: z.object({
+    current_page: z.number().int().positive(),
+    last_page: z.number().int().positive(),
+    per_page: z.number().int().positive(),
+    total: z.number().int().nonnegative(),
+    data: z.array(rawProductPurchaseTransactionSchema),
+  }),
+})
+
+const rawProductProfitabilitySchema = z
+  .object({
+    product_id: exactIdSchema.refine((value) => /^[1-9]\d{0,19}$/.test(String(value))),
+    qty: decimalSchema,
+    total_sales: decimalSchema,
+    total_hpp: decimalSchema,
+    product: z
+      .object({
+        id: exactIdSchema.refine((value) => /^[1-9]\d{0,19}$/.test(String(value))),
+        name: z.string().trim().min(1),
+        code: z.string().trim().min(1).nullable().optional(),
+      })
+      .passthrough(),
+    total_profit: decimalSchema,
+    profit_margin: decimalSchema,
+    avg_sales: decimalSchema,
+    avg_hpp: decimalSchema,
+    method: z.enum(['inventory', 'non_inventory', 'package']),
+    date_from: z.string().date(),
+    date_to: z.string().date(),
+  })
+  .passthrough()
+
+const rawProductProfitabilityEnvelopeSchema = z.object({
+  success: z.literal(true),
+  data: rawProductProfitabilitySchema,
+})
 
 const rawIdentityArrayEnvelopeSchema = z.object({
   success: z.literal(true),
@@ -298,9 +558,11 @@ export interface CreateKledoHttpGatewayOptions {
   timeoutMs?: number
   maxAttempts?: number
   maxResponseBytes?: number
+  maxConcurrency?: number
+  salespersonCacheTtlMs?: number
+  salespersonCacheMaxUsers?: number
   identityCatalogPath?: string
   diagnostic?: (event: KledoGatewayDiagnosticEvent) => void
-  maxConcurrency?: number
   sleep?: (milliseconds: number) => Promise<void>
 }
 
@@ -315,9 +577,26 @@ export interface KledoHttpGateway extends KledoGateway {
 
 export interface KledoGatewayDiagnosticEvent {
   event:
+    | 'identity.memory.hit'
+    | 'identity.sqlite.hit'
+    | 'identity.sqlite.name_miss'
+    | 'identity.sqlite.snapshot_miss'
+    | 'identity.sqlite.unavailable'
     | 'identity.sqlite.write'
     | 'identity.sqlite.write_failed'
     | 'identity.upstream.refresh'
+    | 'report.sales_by_person.request'
+    | 'report.sales_order_kpi.orders.request'
+    | 'report.dormant_customers.historical.request'
+    | 'report.dormant_customers.recent.request'
+    | 'report.receivable_by_invoice.customer_totals.request'
+    | 'report.receivable_by_invoice.invoice_breakdown.request'
+    | 'report.item_price_analysis.product_search.request'
+    | 'report.item_price_analysis.product_detail.request'
+    | 'report.item_price_analysis.latest_sell.request'
+    | 'report.item_price_analysis.latest_purchase.request'
+    | 'report.item_price_analysis.purchase_transactions.request'
+    | 'report.item_price_analysis.profitability.request'
 }
 
 function assertBaseUrl(url: URL, allowInsecureLoopback: boolean): void {
@@ -338,6 +617,12 @@ function normalizedBaseUrl(input: URL): URL {
   const url = new URL(input)
   if (!url.pathname.endsWith('/')) url.pathname += '/'
   return url
+}
+
+function shiftIsoDate(date: string, days: number): string {
+  const shifted = new Date(`${date}T00:00:00.000Z`)
+  shifted.setUTCDate(shifted.getUTCDate() + days)
+  return shifted.toISOString().slice(0, 10)
 }
 
 function paymentState(total: string, remaining: string): 'paid' | 'partially_paid' | 'unpaid' {
@@ -610,6 +895,8 @@ export function createKledoHttpGateway(options: CreateKledoHttpGatewayOptions): 
   const maxAttempts = options.maxAttempts ?? 3
   const maxResponseBytes = options.maxResponseBytes ?? 8 * 1024 * 1024
   const maxConcurrency = options.maxConcurrency ?? 4
+  const salespersonCacheTtlMs = options.salespersonCacheTtlMs ?? 5 * 60 * 1_000
+  const salespersonCacheMaxUsers = options.salespersonCacheMaxUsers ?? 1_000
   const sleep =
     options.sleep ??
     ((milliseconds: number) => new Promise<void>((resolve) => setTimeout(resolve, milliseconds)))
@@ -629,9 +916,6 @@ export function createKledoHttpGateway(options: CreateKledoHttpGatewayOptions): 
       // Diagnostics must never affect a read-only tool result.
     }
   }
-  type CachedIdentity = { id: string; name: string; active: boolean }
-  type CachedContact = CachedIdentity & { typeIds: readonly string[] }
-
 
   if (!Number.isInteger(maxAttempts) || maxAttempts < 1 || maxAttempts > 5) {
     throw new Error('maxAttempts must be an integer between 1 and 5')
@@ -642,6 +926,35 @@ export function createKledoHttpGateway(options: CreateKledoHttpGatewayOptions): 
   if (!Number.isInteger(maxConcurrency) || maxConcurrency < 1 || maxConcurrency > 64) {
     throw new Error('maxConcurrency must be an integer between 1 and 64')
   }
+  if (
+    !Number.isInteger(salespersonCacheTtlMs) ||
+    salespersonCacheTtlMs < 1 ||
+    salespersonCacheTtlMs > 60 * 60 * 1_000
+  ) {
+    throw new Error('salespersonCacheTtlMs must be an integer between 1 and 3600000')
+  }
+  if (
+    !Number.isInteger(salespersonCacheMaxUsers) ||
+    salespersonCacheMaxUsers < 1 ||
+    salespersonCacheMaxUsers > 10_000
+  ) {
+    throw new Error('salespersonCacheMaxUsers must be an integer between 1 and 10000')
+  }
+
+  type CachedIdentity = { id: string; name: string; active: boolean }
+  type CachedContact = CachedIdentity & { typeIds: readonly string[] }
+  type SalespersonResolution = {
+    salesperson: CachedIdentity
+    warnings: readonly string[]
+  }
+  type ProductIdentity = {
+    id: string
+    code: string | null
+    name: string
+  }
+  let salespersonCache:
+    | { expiresAt: number; users: readonly CachedIdentity[] }
+    | undefined
 
   const maxRetryWaitMs = 5_000
   const retryDelay = (response: Response, attempt: number): number | null => {
@@ -874,7 +1187,7 @@ export function createKledoHttpGateway(options: CreateKledoHttpGatewayOptions): 
     const body = await requestJson(new URL('users', baseUrl), signal)
     const envelope = rawUsersEnvelopeSchema.parse(body)
     const rows = Array.isArray(envelope.data) ? envelope.data : envelope.data.data
-    if (rows.length > 10_000) {
+    if (rows.length > salespersonCacheMaxUsers) {
       throw new KledoError('SCHEMA_MISMATCH', 'Kledo returned too many users to resolve safely')
     }
     return rows.map((user) => ({
@@ -1029,6 +1342,167 @@ export function createKledoHttpGateway(options: CreateKledoHttpGatewayOptions): 
     return true
   }
 
+  const resolveSalespersonName = async (
+    suppliedName: string,
+    signal?: AbortSignal,
+  ): Promise<SalespersonResolution> => {
+    const cacheNow = now().getTime()
+    const normalizedName = suppliedName.trim().toLocaleLowerCase('en-US')
+    const warnings: string[] = []
+    const catalogUnavailableWarning =
+      'Local identity catalog unavailable; salesperson was resolved from Kledo'
+    const exactMatch = (candidates: readonly CachedIdentity[]): CachedIdentity => {
+      const matches = candidates.filter(
+        (user) =>
+          user.active && user.name.trim().toLocaleLowerCase('en-US') === normalizedName,
+      )
+      if (matches.length === 0) {
+        throw new KledoError('NOT_FOUND', 'No Kledo user exactly matched the salesperson name')
+      }
+      if (matches.length > 1) {
+        throw new KledoError(
+          'INVALID_ARGUMENT',
+          'Multiple Kledo users exactly matched the salesperson name',
+        )
+      }
+      return matches[0]!
+    }
+
+    let users =
+      salespersonCache && salespersonCache.expiresAt > cacheNow
+        ? salespersonCache.users
+        : undefined
+    if (users) emitDiagnostic('identity.memory.hit')
+    if (!users) {
+      let catalogMatches: readonly CachedIdentity[] | null | undefined
+      try {
+        const identities = await identityCatalog?.findFreshExact(
+          'salesperson',
+          normalizedName,
+          cacheNow - salespersonCacheTtlMs,
+        )
+        catalogMatches = identities?.map((identity) => ({
+          id: identity.externalId,
+          name: identity.displayName,
+          active: identity.active,
+        }))
+        if (identities === null) emitDiagnostic('identity.sqlite.snapshot_miss')
+        else if (identities?.length === 0) emitDiagnostic('identity.sqlite.name_miss')
+        else if (identities) emitDiagnostic('identity.sqlite.hit')
+      } catch {
+        emitDiagnostic('identity.sqlite.unavailable')
+        warnings.push(catalogUnavailableWarning)
+      }
+      if (catalogMatches && catalogMatches.length > 0) {
+        return { salesperson: exactMatch(catalogMatches), warnings }
+      }
+
+      users = await fetchSalespersons(signal)
+      try {
+        await replaceIdentitySnapshots(
+          [{ entityType: 'salesperson', identities: users }],
+          new Date(cacheNow),
+        )
+      } catch {
+        emitDiagnostic('identity.sqlite.write_failed')
+        if (!warnings.includes(catalogUnavailableWarning)) {
+          warnings.push(catalogUnavailableWarning)
+        }
+      }
+      salespersonCache = {
+        expiresAt: cacheNow + salespersonCacheTtlMs,
+        users,
+      }
+    }
+
+    return { salesperson: exactMatch(users), warnings }
+  }
+
+  const resolveProductSelection = async (
+    selection: { productCode?: string; productName?: string },
+    signal?: AbortSignal,
+  ): Promise<ProductIdentity> => {
+    const supplied = selection.productCode ?? selection.productName
+    if (!supplied) {
+      throw new KledoError(
+        'INVALID_ARGUMENT',
+        'Exactly one of productCode or productName is required',
+      )
+    }
+
+    const rows: ProductIdentity[] = []
+    const seenIds = new Set<string>()
+    const pageSize = 100
+    const maxRecords = 10_000
+    let requestedPage = 1
+    while (true) {
+      const url = new URL('finance/products', baseUrl)
+      url.searchParams.set('search', supplied)
+      url.searchParams.set('include_archive', '0')
+      url.searchParams.set('per_page', String(pageSize))
+      url.searchParams.set('page', String(requestedPage))
+      emitDiagnostic('report.item_price_analysis.product_search.request')
+      const body = await requestJson(url, signal)
+      const envelope = rawEntityPageEnvelopeSchema.parse(body)
+      const page = envelope.data
+      if (page.current_page !== requestedPage || page.per_page !== pageSize) {
+        throw new KledoError(
+          'SCHEMA_MISMATCH',
+          'Kledo returned inconsistent product-search pagination data',
+        )
+      }
+      assertConsistentPagination(page)
+      if (page.total > maxRecords) {
+        throw new KledoError('SCHEMA_MISMATCH', 'Kledo returned too many products to resolve safely')
+      }
+      for (const value of page.data) {
+        const product = rawProductIdentitySchema.parse(value)
+        const id = String(product.id)
+        if (seenIds.has(id)) {
+          throw new KledoError(
+            'SCHEMA_MISMATCH',
+            'Kledo returned duplicate product identities',
+          )
+        }
+        seenIds.add(id)
+        rows.push({ id, code: product.code ?? null, name: product.name })
+      }
+      if (rows.length > maxRecords) {
+        throw new KledoError('SCHEMA_MISMATCH', 'Kledo returned too many products to resolve safely')
+      }
+      if (page.current_page >= page.last_page) break
+      requestedPage += 1
+    }
+
+    const ambiguous = (): never => {
+      throw new KledoError(
+        'AMBIGUOUS',
+        'Multiple Kledo products matched; provide the exact productCode (SKU)',
+      )
+    }
+    const normalized = supplied.trim().toLocaleLowerCase('en-US')
+    if (selection.productCode) {
+      const exactCodeMatches = rows.filter(
+        (product) => product.code?.trim().toLocaleLowerCase('en-US') === normalized,
+      )
+      if (exactCodeMatches.length === 0) {
+        throw new KledoError('NOT_FOUND', 'No Kledo product exactly matched the productCode')
+      }
+      if (exactCodeMatches.length > 1) ambiguous()
+      return exactCodeMatches[0]!
+    }
+
+    const exactNameMatches = rows.filter(
+      (product) => product.name.trim().toLocaleLowerCase('en-US') === normalized,
+    )
+    if (exactNameMatches.length === 1) return exactNameMatches[0]!
+    if (exactNameMatches.length > 1 || rows.length > 1) ambiguous()
+    if (rows.length === 0) {
+      throw new KledoError('NOT_FOUND', 'No Kledo product matched the productName')
+    }
+    return rows[0]!
+  }
+
   return {
     async warmIdentityCatalog(signal?: AbortSignal): Promise<KledoIdentityWarmupResult> {
       if (!identityCatalog) {
@@ -1090,6 +1564,10 @@ export function createKledoHttpGateway(options: CreateKledoHttpGatewayOptions): 
       } catch {
         emitDiagnostic('identity.sqlite.write_failed')
         throw new KledoError('INTERNAL_ERROR', 'Could not update local identity catalog')
+      }
+      salespersonCache = {
+        expiresAt: fetchedAt.getTime() + salespersonCacheTtlMs,
+        users,
       }
       const snapshotByType = new Map(snapshots.map((snapshot) => [snapshot.entityType, snapshot]))
       const counts = Object.fromEntries(
@@ -1309,6 +1787,8 @@ export function createKledoHttpGateway(options: CreateKledoHttpGatewayOptions): 
       const parameters: Record<string, JsonValue> = {}
       let requestedPage: number | undefined
       let requestedPageSize: number | undefined
+      let salesPersonFilter: { id: string; name?: string } | undefined
+      let reportWarnings: readonly string[] = []
 
       switch (input.report) {
         case 'executive_summary': {
@@ -1364,6 +1844,259 @@ export function createKledoHttpGateway(options: CreateKledoHttpGatewayOptions): 
           wireParameters.set('date_to', input.period.to)
           parameters.period = input.period
           break
+        }
+        case 'receivable_by_invoice': {
+          const periodType = 'monthly'
+          const customerPage = pageFromCursor(
+            input.cursor,
+            'report',
+            reportCursorRequest(input),
+            cursorKey,
+          )
+          const summaryUrl = new URL('reportings/agedReceivable', baseUrl)
+          summaryUrl.searchParams.set('date', input.asOf)
+          summaryUrl.searchParams.set('period_type', periodType)
+          summaryUrl.searchParams.set('per_page', String(input.pageSize))
+          summaryUrl.searchParams.set('page', String(customerPage))
+          emitDiagnostic('report.receivable_by_invoice.customer_totals.request')
+          const summaryBody = await requestJson(summaryUrl, signal)
+          const summaryPage = rawAgedReceivablePageEnvelopeSchema.parse(summaryBody).data
+          if (
+            summaryPage.current_page !== customerPage ||
+            summaryPage.per_page !== input.pageSize
+          ) {
+            throw new KledoError(
+              'SCHEMA_MISMATCH',
+              'Kledo returned inconsistent receivable-customer pagination data',
+            )
+          }
+          assertConsistentPagination(summaryPage)
+
+          const summaryDueKeys = ['-2', '-1', '0', '1', '2', '3', '4'] as const
+          const detailDueKeys = ['-3', ...summaryDueKeys] as const
+          const summaryDueMatches = (
+            detail: z.infer<typeof rawAgedReceivableDueSchema>,
+            summary: z.infer<typeof rawAgedReceivableSummaryDueSchema>,
+          ): boolean =>
+            summaryDueKeys.every(
+              (key) =>
+                compareDecimals(decimalString(detail[key]), decimalString(summary[key])) === 0,
+            )
+          const detailDueMatches = (
+            left: z.infer<typeof rawAgedReceivableDueSchema>,
+            right: z.infer<typeof rawAgedReceivableDueSchema>,
+          ): boolean =>
+            detailDueKeys.every(
+              (key) =>
+                compareDecimals(decimalString(left[key]), decimalString(right[key])) === 0,
+            )
+          const normalizedTotals = (
+            value: z.infer<typeof rawAgedReceivableDueSchema>,
+          ): Record<string, JsonValue> => ({
+            invoiceAmount: normalizeMoney(value['-3'], value),
+            outstanding: normalizeMoney(value['-1'], value),
+            notYetDue: normalizeMoney(value['-2'], value),
+            overdue: {
+              lessThanOneMonth: normalizeMoney(value['0'], value),
+              oneToTwoMonths: normalizeMoney(value['1'], value),
+              twoToThreeMonths: normalizeMoney(value['2'], value),
+              threeToFourMonths: normalizeMoney(value['3'], value),
+              moreThanFourMonths: normalizeMoney(value['4'], value),
+            },
+          })
+
+          const customers = await Promise.all(
+            summaryPage.data.map(async (summaryCustomer) => {
+              const contactId = String(summaryCustomer.id)
+              const invoices: z.infer<typeof rawAgedReceivableInvoiceSchema>[] = []
+              const invoiceIds = new Set<string>()
+              const detailPageSize = 100
+              const maxInvoicesPerCustomer = 10_000
+              let detailPageNumber = 1
+              let verifiedContact: z.infer<typeof rawContactSchema> | undefined
+              let verifiedTotalDue: z.infer<typeof rawAgedReceivableDueSchema> | undefined
+
+              while (true) {
+                const detailUrl = new URL(
+                  `reportings/agedReceivableDetail/${contactId}`,
+                  baseUrl,
+                )
+                detailUrl.searchParams.set('date', input.asOf)
+                detailUrl.searchParams.set('period_type', periodType)
+                detailUrl.searchParams.set('per_page', String(detailPageSize))
+                detailUrl.searchParams.set('page', String(detailPageNumber))
+                emitDiagnostic('report.receivable_by_invoice.invoice_breakdown.request')
+                const detailBody = await requestJson(detailUrl, signal)
+                const detailPage = rawAgedReceivableDetailEnvelopeSchema.parse(detailBody).data
+                if (
+                  detailPage.current_page !== detailPageNumber ||
+                  detailPage.per_page !== detailPageSize ||
+                  String(detailPage.contact.id) !== contactId ||
+                  !summaryDueMatches(detailPage.total_due, summaryCustomer.due) ||
+                  (verifiedTotalDue !== undefined &&
+                    !detailDueMatches(detailPage.total_due, verifiedTotalDue))
+                ) {
+                  throw new KledoError(
+                    'SCHEMA_MISMATCH',
+                    'Kledo returned inconsistent receivable invoice-breakdown data',
+                  )
+                }
+                assertConsistentPagination(detailPage)
+                if (detailPage.total > maxInvoicesPerCustomer) {
+                  throw new KledoError(
+                    'SCHEMA_MISMATCH',
+                    'Kledo returned too many receivable invoices to analyze safely',
+                  )
+                }
+                if (verifiedContact) {
+                  const previousCompany = verifiedContact.company?.trim() || null
+                  const currentCompany = detailPage.contact.company?.trim() || null
+                  const previousName = verifiedContact.name?.trim() || null
+                  const currentName = detailPage.contact.name?.trim() || null
+                  if (previousCompany !== currentCompany || previousName !== currentName) {
+                    throw new KledoError(
+                      'SCHEMA_MISMATCH',
+                      'Kledo returned inconsistent receivable customer identity data',
+                    )
+                  }
+                } else {
+                  verifiedContact = detailPage.contact
+                }
+                verifiedTotalDue ??= detailPage.total_due
+                for (const invoice of detailPage.data) {
+                  const invoiceId = String(invoice.id)
+                  if (invoiceIds.has(invoiceId)) {
+                    throw new KledoError(
+                      'SCHEMA_MISMATCH',
+                      'Kledo returned duplicate receivable invoice identities',
+                    )
+                  }
+                  invoiceIds.add(invoiceId)
+                  invoices.push(invoice)
+                }
+                if (invoices.length > maxInvoicesPerCustomer) {
+                  throw new KledoError(
+                    'SCHEMA_MISMATCH',
+                    'Kledo returned too many receivable invoices to analyze safely',
+                  )
+                }
+                if (detailPage.current_page >= detailPage.last_page) break
+                detailPageNumber += 1
+              }
+
+              if (!verifiedContact || !verifiedTotalDue) {
+                throw new KledoError(
+                  'SCHEMA_MISMATCH',
+                  'Kledo returned receivable data without a customer identity',
+                )
+              }
+              if (
+                invoices.length === 0 &&
+                compareDecimals(decimalString(summaryCustomer.due['-1']), '0') !== 0
+              ) {
+                throw new KledoError(
+                  'SCHEMA_MISMATCH',
+                  'Kledo returned an outstanding receivable without invoice details',
+                )
+              }
+
+              const companyName =
+                summaryCustomer.company?.trim() || verifiedContact.company?.trim() || null
+              const personName =
+                summaryCustomer.name?.trim() || verifiedContact.name?.trim() || null
+              const summaryCompanyName = summaryCustomer.company?.trim() || null
+              const detailCompanyName = verifiedContact.company?.trim() || null
+              const summaryPersonName = summaryCustomer.name?.trim() || null
+              const detailPersonName = verifiedContact.name?.trim() || null
+              if (
+                (summaryCompanyName !== null &&
+                  detailCompanyName !== null &&
+                  summaryCompanyName !== detailCompanyName) ||
+                (summaryPersonName !== null &&
+                  detailPersonName !== null &&
+                  summaryPersonName !== detailPersonName)
+              ) {
+                throw new KledoError(
+                  'SCHEMA_MISMATCH',
+                  'Kledo returned inconsistent receivable customer identity data',
+                )
+              }
+              const displayName = companyName || personName
+              if (!displayName) {
+                throw new KledoError(
+                  'SCHEMA_MISMATCH',
+                  'Kledo returned an unnamed receivable customer',
+                )
+              }
+
+              return {
+                customer: {
+                  id: contactId,
+                  displayName,
+                  companyName,
+                  personName,
+                },
+                totals: normalizedTotals(verifiedTotalDue),
+                invoices: invoices.map((invoice) => ({
+                  id: String(invoice.id),
+                  invoiceNumber: invoice.ref_number,
+                  transactionDate: invoice.trans_date,
+                  dueDate: invoice.due_date,
+                  projectReference: invoice.memo,
+                  invoiceAmount: normalizeMoney(invoice.due['-3'], invoice.due),
+                  outstanding: normalizeMoney(invoice.due['-1'], invoice.due),
+                  notYetDue: normalizeMoney(invoice.due['-2'], invoice.due),
+                  transactionAgeDays: invoice.age_trans,
+                  dueAgeDays: invoice.age_due,
+                })),
+              }
+            }),
+          )
+
+          const hasMore = summaryPage.current_page < summaryPage.last_page
+          return kledoReportOutputSchema.parse({
+            report: input.report,
+            parameters: {
+              asOf: input.asOf,
+              periodType,
+              pageSize: input.pageSize,
+            },
+            data: { customers },
+            pageInfo: {
+              ...(hasMore
+                ? {
+                    nextCursor: cursorForRequest(
+                      'report',
+                      reportCursorRequest(input),
+                      summaryPage.current_page + 1,
+                      cursorKey,
+                    ),
+                  }
+                : {}),
+              hasMore,
+              total: summaryPage.total,
+            },
+            provenance: {
+              customerTotals: '/reportings/agedReceivable',
+              invoiceBreakdown: '/reportings/agedReceivableDetail/:contactId',
+              projectReference: { apiField: 'memo', webUiField: 'Reference' },
+            },
+            meta: {
+              fetchedAt: now().toISOString(),
+              ...(options.tenant ? { tenant: options.tenant } : {}),
+              source: 'kledo_semantic_adapter',
+              complete: !hasMore,
+              warnings: [
+                "projectReference is Kledo's memo field, displayed as Reference in the Web UI.",
+                'Each returned customer includes the complete invoice drill-down reported by Kledo for the selected as-of date.',
+                ...(hasMore
+                  ? [
+                      'More customer pages remain; follow nextCursor before presenting a company-wide receivable list.',
+                    ]
+                  : []),
+              ],
+            },
+          })
         }
         case 'aged_receivable':
         case 'aged_payable': {
@@ -1426,6 +2159,195 @@ export function createKledoHttpGateway(options: CreateKledoHttpGatewayOptions): 
           if (input.salesPersonIds) parameters.salesPersonIds = input.salesPersonIds
           break
         }
+        case 'sales_order_kpi': {
+          const upstreamPageSize = 100
+          const maxOrders = 10_000
+          const includedStatusIds = ['5', '6', '7'] as const
+          const includedStatuses = new Set<string>(includedStatusIds)
+          if (input.salesPersonName) {
+            const resolution = await resolveSalespersonName(input.salesPersonName, signal)
+            salesPersonFilter = {
+              id: resolution.salesperson.id,
+              name: resolution.salesperson.name,
+            }
+            reportWarnings = resolution.warnings
+          } else {
+            salesPersonFilter = input.salesPersonId ? { id: input.salesPersonId } : undefined
+          }
+
+          let upstreamPage = 1
+          let expectedTotal: number | undefined
+          let expectedLastPage: number | undefined
+          let orderCount = 0
+          let orderedQuantity = '0'
+          let netBookedOrderValue = '0'
+          let grossBookedOrderValue = '0'
+          let openOrderBacklog = '0'
+          const orderIds = new Set<string>()
+
+          while (true) {
+            const ordersUrl = new URL('finance/orders', baseUrl)
+            ordersUrl.searchParams.set('trans_type_ids', '6')
+            ordersUrl.searchParams.set('status_ids', includedStatusIds.join(','))
+            ordersUrl.searchParams.set('date_from', input.period.from)
+            ordersUrl.searchParams.set('date_to', input.period.to)
+            if (salesPersonFilter) ordersUrl.searchParams.set('sales_id', salesPersonFilter.id)
+            ordersUrl.searchParams.set('per_page', String(upstreamPageSize))
+            ordersUrl.searchParams.set('page', String(upstreamPage))
+
+            emitDiagnostic('report.sales_order_kpi.orders.request')
+            const body = await requestJson(ordersUrl, signal)
+            const envelope = rawSalesOrderKpiPageEnvelopeSchema.parse(body)
+            const page = envelope.data
+            if (page.current_page !== upstreamPage || page.per_page !== upstreamPageSize) {
+              throw new KledoError(
+                'SCHEMA_MISMATCH',
+                'Kledo returned inconsistent Sales Order pagination data',
+              )
+            }
+            assertConsistentPagination(page)
+            if (page.total > maxOrders) {
+              throw new KledoError(
+                'SCHEMA_MISMATCH',
+                'Kledo returned too many Sales Orders to aggregate safely',
+              )
+            }
+            if (expectedTotal === undefined) {
+              expectedTotal = page.total
+              expectedLastPage = page.last_page
+            } else if (page.total !== expectedTotal || page.last_page !== expectedLastPage) {
+              throw new KledoError(
+                'SCHEMA_MISMATCH',
+                'Kledo changed the Sales Order result set during aggregation',
+              )
+            }
+
+            for (const order of page.data) {
+              const id = String(order.id)
+              const salespersonId =
+                order.sales_id === null || order.sales_id === undefined
+                  ? undefined
+                  : String(order.sales_id)
+              const outsideScope =
+                String(order.trans_type_id) !== '6' ||
+                !includedStatuses.has(String(order.status_id)) ||
+                order.trans_date < input.period.from ||
+                order.trans_date > input.period.to ||
+                (salesPersonFilter !== undefined && salespersonId !== salesPersonFilter.id)
+              if (outsideScope) {
+                throw new KledoError(
+                  'SCHEMA_MISMATCH',
+                  'Kledo returned Sales Orders outside the requested KPI scope',
+                )
+              }
+              if (orderIds.has(id)) {
+                throw new KledoError(
+                  'SCHEMA_MISMATCH',
+                  'Kledo returned duplicate Sales Orders during KPI aggregation',
+                )
+              }
+              orderIds.add(id)
+              orderCount += 1
+            }
+
+            orderedQuantity = addDecimals(
+              orderedQuantity,
+              decimalString(page.grand_subtotal.qty),
+            )
+            netBookedOrderValue = addDecimals(
+              netBookedOrderValue,
+              decimalString(page.grand_subtotal.amount),
+            )
+            grossBookedOrderValue = addDecimals(
+              grossBookedOrderValue,
+              decimalString(page.grand_subtotal.amount_after_tax),
+            )
+            openOrderBacklog = addDecimals(
+              openOrderBacklog,
+              decimalString(page.grand_subtotal.unbilled_amount),
+            )
+
+            if (page.current_page >= page.last_page) break
+            upstreamPage += 1
+          }
+
+          if (expectedTotal === undefined || orderCount !== expectedTotal) {
+            throw new KledoError(
+              'SCHEMA_MISMATCH',
+              'Kledo returned an incomplete Sales Order KPI result set',
+            )
+          }
+
+          return kledoReportOutputSchema.parse({
+            report: input.report,
+            parameters: {
+              period: input.period,
+              dateBasis: 'trans_date',
+              ...(salesPersonFilter ? { salesperson: salesPersonFilter } : {}),
+              statusPolicy: {
+                name: 'booked',
+                includedStatusIds,
+              },
+            },
+            data: {
+              orderCount,
+              orderedQuantity,
+              netBookedOrderValue: normalizeMoney(netBookedOrderValue),
+              grossBookedOrderValue: normalizeMoney(grossBookedOrderValue),
+              openOrderBacklog: normalizeMoney(openOrderBacklog),
+            },
+            provenance: {
+              orders: '/finance/orders',
+              transactionType: { id: '6', label: 'Sales Order' },
+              aggregateFields: {
+                orderedQuantity: 'grand_subtotal.qty',
+                netBookedOrderValue: 'grand_subtotal.amount',
+                grossBookedOrderValue: 'grand_subtotal.amount_after_tax',
+                openOrderBacklog: 'grand_subtotal.unbilled_amount',
+              },
+              aggregateScope: 'sum_of_all_page_grand_subtotals',
+            },
+            meta: {
+              fetchedAt: now().toISOString(),
+              ...(options.tenant ? { tenant: options.tenant } : {}),
+              source: 'kledo_semantic_adapter',
+              complete: true,
+              warnings: [
+                ...reportWarnings,
+                'Booked order value is order intake; it is not revenue, invoice value, or collected cash.',
+                'Open order backlog is Kledo unbilled order value; it is not accounts receivable.',
+              ],
+            },
+          })
+        }
+        case 'sales_by_person': {
+          if (!input.period) invalid('sales_by_person requires period')
+          path = 'reportings/salesPerPerson'
+          requestedPage = pageFromCursor(
+            input.cursor,
+            'report',
+            reportCursorRequest(input),
+            cursorKey,
+          )
+          requestedPageSize = input.pageSize
+          const dateBasis = input.dateBasis ?? 'trans_date'
+          if (input.salesPersonName) {
+            const resolution = await resolveSalespersonName(input.salesPersonName, signal)
+            salesPersonFilter = resolution.salesperson
+            reportWarnings = resolution.warnings
+          } else {
+            salesPersonFilter = input.salesPersonId ? { id: input.salesPersonId } : undefined
+          }
+          wireParameters.set('date_from', input.period.from)
+          wireParameters.set('date_to', input.period.to)
+          wireParameters.set('date_filter', dateBasis)
+          if (salesPersonFilter) wireParameters.set('sales_id', salesPersonFilter.id)
+          parameters.period = input.period
+          parameters.dateBasis = dateBasis
+          if (salesPersonFilter) parameters.salesperson = salesPersonFilter
+          parameters.pageSize = requestedPageSize
+          break
+        }
         case 'sales_by_product':
         case 'income_by_customer': {
           if (!input.period) invalid(`${input.report} requires period`)
@@ -1473,6 +2395,399 @@ export function createKledoHttpGateway(options: CreateKledoHttpGatewayOptions): 
           if (input.salesPersonIds) parameters.salesPersonIds = input.salesPersonIds
           break
         }
+        case 'dormant_customers': {
+          const inactiveDays = input.inactiveDays ?? 90
+          const historyDays = input.historyDays ?? 365
+          const pageSize = input.pageSize
+          const localPage = pageFromCursor(
+            input.cursor,
+            'report',
+            reportCursorRequest(input),
+            cursorKey,
+          )
+          const inactivityCutoff = shiftIsoDate(input.asOf, -inactiveDays)
+          const recentPeriod = {
+            from: shiftIsoDate(inactivityCutoff, 1),
+            to: input.asOf,
+          }
+          const historicalPeriod = {
+            from: shiftIsoDate(inactivityCutoff, -(historyDays - 1)),
+            to: inactivityCutoff,
+          }
+          const upstreamPageSize = 100
+          const maxRows = 10_000
+          const fetchWindow = async (
+            period: { from: string; to: string },
+            diagnosticEvent:
+              | 'report.dormant_customers.historical.request'
+              | 'report.dormant_customers.recent.request',
+          ): Promise<z.infer<typeof rawIncomePerCustomerRowSchema>[]> => {
+            const rows: z.infer<typeof rawIncomePerCustomerRowSchema>[] = []
+            const contactIds = new Set<string>()
+            let upstreamPage = 1
+            while (true) {
+              const reportUrl = new URL('reportings/incomePerCustomer', baseUrl)
+              reportUrl.searchParams.set('date_from', period.from)
+              reportUrl.searchParams.set('date_to', period.to)
+              reportUrl.searchParams.set('per_page', String(upstreamPageSize))
+              reportUrl.searchParams.set('page', String(upstreamPage))
+              emitDiagnostic(diagnosticEvent)
+              const reportBody = await requestJson(reportUrl, signal)
+              const envelope = rawIncomePerCustomerPageEnvelopeSchema.parse(reportBody)
+              const page = envelope.data
+              if (page.current_page !== upstreamPage || page.per_page !== upstreamPageSize) {
+                throw new KledoError(
+                  'SCHEMA_MISMATCH',
+                  'Kledo returned inconsistent customer-income pagination data',
+                )
+              }
+              assertConsistentPagination(page)
+              if (page.total > maxRows) {
+                throw new KledoError(
+                  'SCHEMA_MISMATCH',
+                  'Kledo returned too many customer-income rows to analyze safely',
+                )
+              }
+              for (const row of page.data) {
+                const contactId = String(row.contact_id)
+                if (String(row.contact.id) !== contactId || contactIds.has(contactId)) {
+                  throw new KledoError(
+                    'SCHEMA_MISMATCH',
+                    'Kledo returned inconsistent customer identity data',
+                  )
+                }
+                contactIds.add(contactId)
+                rows.push(row)
+              }
+              if (rows.length > maxRows) {
+                throw new KledoError(
+                  'SCHEMA_MISMATCH',
+                  'Kledo returned too many customer-income rows to analyze safely',
+                )
+              }
+              if (page.current_page >= page.last_page) break
+              upstreamPage += 1
+            }
+            return rows
+          }
+
+          const historicalRows = await fetchWindow(
+            historicalPeriod,
+            'report.dormant_customers.historical.request',
+          )
+          const recentRows = await fetchWindow(
+            recentPeriod,
+            'report.dormant_customers.recent.request',
+          )
+          const recentContactIds = new Set(recentRows.map((row) => String(row.contact_id)))
+          const candidates = historicalRows
+            .filter((row) => !recentContactIds.has(String(row.contact_id)))
+            .sort((left, right) => {
+              const byIncome = compareDecimals(
+                decimalString(right.amount),
+                decimalString(left.amount),
+              )
+              if (byIncome !== 0) return byIncome
+              return String(left.contact_id).localeCompare(String(right.contact_id), 'en', {
+                numeric: true,
+              })
+            })
+            .map((row) => {
+              const companyName = row.contact.company?.trim() || null
+              const personName = row.contact.name?.trim() || null
+              const displayName = companyName || personName
+              if (!displayName) {
+                throw new KledoError(
+                  'SCHEMA_MISMATCH',
+                  'Kledo returned a dormant-customer candidate without a display name',
+                )
+              }
+              return {
+                customer: {
+                  id: String(row.contact_id),
+                  displayName,
+                  companyName,
+                  personName,
+                },
+                historicalIncome: normalizeMoney(row.amount, row),
+                historicalTransactionCount: row.total_transactions,
+              }
+            })
+          const offset = (localPage - 1) * pageSize
+          const selectedCandidates = candidates.slice(offset, offset + pageSize)
+          const hasMore = offset + selectedCandidates.length < candidates.length
+
+          return kledoReportOutputSchema.parse({
+            report: input.report,
+            parameters: {
+              asOf: input.asOf,
+              inactiveDays,
+              historyDays,
+              inactivityCutoff,
+              historicalPeriod,
+              recentPeriod,
+              pageSize,
+            },
+            data: { candidates: selectedCandidates },
+            pageInfo: {
+              ...(hasMore
+                ? {
+                    nextCursor: cursorForRequest(
+                      'report',
+                      reportCursorRequest(input),
+                      localPage + 1,
+                      cursorKey,
+                    ),
+                  }
+                : {}),
+              hasMore,
+              total: candidates.length,
+            },
+            meta: {
+              fetchedAt: now().toISOString(),
+              ...(options.tenant ? { tenant: options.tenant } : {}),
+              source: 'kledo_native_report',
+              complete: !hasMore,
+              warnings: [
+                'Dormancy candidates are inferred from missing recent Kledo income activity; this is not proof that the customer relationship has ended.',
+                "The exact last transaction date is unavailable from Kledo's Income per Customer report.",
+                'Review contact status and outreach consent before follow-up.',
+                'Customers with activity only before the historical eligibility period are outside this analysis.',
+              ],
+            },
+          })
+        }
+        case 'item_price_analysis': {
+          const product = await resolveProductSelection(input, signal)
+          const profitabilityMethod = input.profitabilityMethod ?? 'inventory'
+
+          const detailUrl = new URL(`finance/products/${product.id}`, baseUrl)
+          const latestSellUrl = new URL('finance/products/last_prices', baseUrl)
+          latestSellUrl.searchParams.set('ids', product.id)
+          const latestPurchaseUrl = new URL('finance/products/last_buy_prices', baseUrl)
+          latestPurchaseUrl.searchParams.set('ids', product.id)
+          const latestPurchaseTransactionUrl = new URL(
+            `finance/products/${product.id}/transactions`,
+            baseUrl,
+          )
+          latestPurchaseTransactionUrl.searchParams.set('trans_type_ids', '3')
+          latestPurchaseTransactionUrl.searchParams.set('sort_by', 'trans_date')
+          latestPurchaseTransactionUrl.searchParams.set('order_by', 'desc')
+          latestPurchaseTransactionUrl.searchParams.set('per_page', '100')
+          latestPurchaseTransactionUrl.searchParams.set('page', '1')
+          const profitabilityUrl = new URL(
+            `finance/products/${product.id}/profitability`,
+            baseUrl,
+          )
+          profitabilityUrl.searchParams.set('date_from', input.period.from)
+          profitabilityUrl.searchParams.set('date_to', input.period.to)
+          profitabilityUrl.searchParams.set('method', profitabilityMethod)
+
+          emitDiagnostic('report.item_price_analysis.product_detail.request')
+          emitDiagnostic('report.item_price_analysis.latest_sell.request')
+          emitDiagnostic('report.item_price_analysis.latest_purchase.request')
+          emitDiagnostic('report.item_price_analysis.purchase_transactions.request')
+          emitDiagnostic('report.item_price_analysis.profitability.request')
+          const [
+            detailBody,
+            latestSellBody,
+            latestPurchaseBody,
+            latestPurchaseTransactionBody,
+            profitabilityBody,
+          ] = await Promise.all([
+            requestJson(detailUrl, signal),
+            requestJson(latestSellUrl, signal),
+            requestJson(latestPurchaseUrl, signal),
+            requestJson(latestPurchaseTransactionUrl, signal),
+            requestJson(profitabilityUrl, signal),
+          ])
+          const detail = rawProductPriceDetailEnvelopeSchema.parse(detailBody).data
+          const latestSellRows = rawLatestSellPriceEnvelopeSchema.parse(latestSellBody).data
+          const latestPurchaseRows = rawLatestPurchasePriceEnvelopeSchema.parse(
+            latestPurchaseBody,
+          ).data
+          const latestPurchaseTransactionPage =
+            rawProductPurchaseTransactionsEnvelopeSchema.parse(
+              latestPurchaseTransactionBody,
+            ).data
+          const profitability = rawProductProfitabilityEnvelopeSchema.parse(
+            profitabilityBody,
+          ).data
+
+          const detailCode = detail.code ?? null
+          if (
+            String(detail.id) !== product.id ||
+            detailCode !== product.code ||
+            detail.name !== product.name
+          ) {
+            throw new KledoError(
+              'SCHEMA_MISMATCH',
+              'Kledo returned inconsistent product identity data',
+            )
+          }
+          if (
+            latestSellRows.length > 1 ||
+            latestSellRows.some((row) => String(row.id) !== product.id) ||
+            Object.keys(latestPurchaseRows).some((id) => id !== product.id)
+          ) {
+            throw new KledoError(
+              'SCHEMA_MISMATCH',
+              'Kledo returned inconsistent latest product-price data',
+            )
+          }
+          if (
+            latestPurchaseTransactionPage.current_page !== 1 ||
+            latestPurchaseTransactionPage.per_page !== 100 ||
+            latestPurchaseTransactionPage.data.some(
+              (transaction) => String(transaction.trans_type_id) !== '3',
+            )
+          ) {
+            throw new KledoError(
+              'SCHEMA_MISMATCH',
+              'Kledo returned inconsistent product purchase-transaction data',
+            )
+          }
+          assertConsistentPagination(latestPurchaseTransactionPage)
+          if (
+            String(profitability.product_id) !== product.id ||
+            String(profitability.product.id) !== product.id ||
+            profitability.product.name !== product.name ||
+            (profitability.product.code ?? null) !== product.code ||
+            profitability.date_from !== input.period.from ||
+            profitability.date_to !== input.period.to ||
+            profitability.method !== profitabilityMethod
+          ) {
+            throw new KledoError(
+              'SCHEMA_MISMATCH',
+              'Kledo returned inconsistent product-profitability data',
+            )
+          }
+
+          const latestSell = latestSellRows[0]
+          const latestPurchase = latestPurchaseRows[product.id]
+          const latestPurchasePrice = latestPurchase?.last_buy_price
+          const latestPurchaseDate = (() => {
+            if (
+              latestPurchasePrice === null ||
+              latestPurchasePrice === undefined ||
+              latestPurchaseTransactionPage.data.length === 0
+            ) {
+              return null
+            }
+            const latestDate = latestPurchaseTransactionPage.data[0]!.trans_date
+            const corroborated = latestPurchaseTransactionPage.data.some(
+              (transaction) =>
+                transaction.trans_date === latestDate &&
+                transaction.price !== null &&
+                compareDecimals(
+                  decimalString(transaction.price),
+                  decimalString(latestPurchasePrice),
+                ) === 0,
+            )
+            return corroborated ? latestDate : null
+          })()
+          const booleanFlag = (
+            value: boolean | 0 | 1 | null | undefined,
+          ): boolean | null => {
+            if (value === null || value === undefined) return null
+            return typeof value === 'boolean' ? value : value === 1
+          }
+          const optionalMoney = (
+            value: string | number | null | undefined,
+            source: unknown,
+          ): Record<string, JsonValue> | null =>
+            value === null || value === undefined ? null : normalizeMoney(value, source, detail)
+
+          return kledoReportOutputSchema.parse({
+            report: input.report,
+            parameters: {
+              productSelector: input.productCode
+                ? { code: input.productCode }
+                : { name: input.productName },
+              period: input.period,
+              profitabilityMethod,
+            },
+            data: {
+              product: {
+                id: product.id,
+                code: product.code,
+                name: product.name,
+                unit: detail.unit
+                  ? { id: String(detail.unit.id), name: detail.unit.name }
+                  : null,
+                canSell: booleanFlag(detail.is_sell),
+                canPurchase: booleanFlag(detail.is_purchase),
+                tracked: booleanFlag(detail.is_track),
+              },
+              catalogPrices: {
+                salePrice: optionalMoney(detail.price, detail),
+                basePurchasePrice: optionalMoney(detail.base_price, detail),
+                averageInventoryCost: optionalMoney(detail.avg_base_price, detail),
+              },
+              latestTransactionPrices: {
+                soldUnitPrice: optionalMoney(latestSell?.last_sell_price, latestSell),
+                soldTransactionDate: detail.last_sale_transaction?.trans_date ?? null,
+                purchasedUnitPrice: optionalMoney(
+                  latestPurchasePrice,
+                  latestPurchase,
+                ),
+                purchaseTransactionDate: latestPurchaseDate,
+              },
+              profitability: {
+                soldQuantity: decimalString(profitability.qty),
+                totalSales: normalizeMoney(profitability.total_sales, profitability, detail),
+                totalCostOfGoodsSold: normalizeMoney(
+                  profitability.total_hpp,
+                  profitability,
+                  detail,
+                ),
+                grossProfit: normalizeMoney(
+                  profitability.total_profit,
+                  profitability,
+                  detail,
+                ),
+                grossMarginPercent: decimalString(profitability.profit_margin),
+                averageSoldUnitPrice: normalizeMoney(
+                  profitability.avg_sales,
+                  profitability,
+                  detail,
+                ),
+                averageCostOfGoodsSoldPerUnit: normalizeMoney(
+                  profitability.avg_hpp,
+                  profitability,
+                  detail,
+                ),
+              },
+            },
+            provenance: {
+              productResolution: '/finance/products',
+              catalogPrices: '/finance/products/:id',
+              latestSoldUnitPrice: '/finance/products/last_prices',
+              latestPurchasedUnitPrice: '/finance/products/last_buy_prices',
+              latestPurchaseTransaction: '/finance/products/:id/transactions',
+              profitability: '/finance/products/:id/profitability',
+            },
+            meta: {
+              fetchedAt: now().toISOString(),
+              ...(options.tenant ? { tenant: options.tenant } : {}),
+              source: 'kledo_semantic_adapter',
+              complete: true,
+              warnings: [
+                'Catalog prices are product settings; they are not evidence of a completed sale or purchase.',
+                ...(latestPurchasePrice !== null &&
+                latestPurchasePrice !== undefined &&
+                latestPurchaseDate === null
+                  ? [
+                      "Kledo's latest purchase price could not be matched to the newest Purchase Invoice date.",
+                    ]
+                  : [
+                      "The latest purchase date is corroborated against Kledo's product transactions filtered to Purchase Invoices.",
+                    ]),
+                "Period profitability uses Kledo's product profitability and HPP calculation for the requested method.",
+              ],
+            },
+          })
+        }
         default:
           throw new KledoError('UNSUPPORTED_OPERATION', 'Unsupported Kledo report')
       }
@@ -1480,7 +2795,84 @@ export function createKledoHttpGateway(options: CreateKledoHttpGatewayOptions): 
       const url = new URL(path, baseUrl)
       url.search = wireParameters.toString()
 
+      if (input.report === 'sales_by_person') {
+        emitDiagnostic('report.sales_by_person.request')
+      }
       const body = await requestJson(url, signal)
+      if (input.report === 'sales_by_person') {
+        if (requestedPage === undefined || requestedPageSize === undefined) {
+          throw new KledoError('INTERNAL_ERROR', 'Sales by person pagination was not initialized')
+        }
+        const envelope = rawSalesByPersonEnvelopeSchema.parse(body)
+        const allRows = envelope.data
+        if (
+          salesPersonFilter &&
+          allRows.some((row) => String(row.sales_id) !== salesPersonFilter.id)
+        ) {
+          throw new KledoError(
+            'SCHEMA_MISMATCH',
+            'Kledo returned a different salesperson than requested',
+          )
+        }
+        if (allRows.some((row) => String(row.sales.id) !== String(row.sales_id))) {
+          throw new KledoError(
+            'SCHEMA_MISMATCH',
+            'Kledo returned inconsistent salesperson identity data',
+          )
+        }
+        const offset = (requestedPage - 1) * requestedPageSize
+        const selectedRows = allRows.slice(offset, offset + requestedPageSize)
+        const hasMore = offset + selectedRows.length < allRows.length
+        const rows = selectedRows.map((row) => ({
+          salesperson: { id: String(row.sales_id), name: row.sales.name },
+          sales: normalizeMoney(row.total_amount_after_tax, row),
+          salesCount: row.total_count,
+          commission: normalizeMoney(row.total_commission, row),
+        }))
+        const matchedName = rows.length === 1 ? rows[0]?.salesperson.name : undefined
+        if (salesPersonFilter) {
+          parameters.salesperson = {
+            id: salesPersonFilter.id,
+            ...(salesPersonFilter.name
+              ? { name: salesPersonFilter.name }
+              : matchedName
+                ? { name: matchedName }
+                : {}),
+          }
+        }
+
+        return kledoReportOutputSchema.parse({
+          report: input.report,
+          parameters: {
+            period: input.period,
+            dateBasis: input.dateBasis ?? 'trans_date',
+            ...(parameters.salesperson ? { salesperson: parameters.salesperson } : {}),
+            pageSize: requestedPageSize,
+          },
+          data: { rows },
+          pageInfo: {
+            ...(hasMore
+              ? {
+                  nextCursor: cursorForRequest(
+                    'report',
+                    reportCursorRequest(input),
+                    requestedPage + 1,
+                    cursorKey,
+                  ),
+                }
+              : {}),
+            hasMore,
+            total: allRows.length,
+          },
+          meta: {
+            fetchedAt: now().toISOString(),
+            ...(options.tenant ? { tenant: options.tenant } : {}),
+            source: 'kledo_native_report',
+            complete: !hasMore,
+            warnings: reportWarnings,
+          },
+        })
+      }
       if (requestedPage !== undefined && requestedPageSize !== undefined) {
         const envelope = rawNativeReportPageEnvelopeSchema.parse(body)
         const page = envelope.data

@@ -15,7 +15,7 @@ import {
   kledoQueryInputSchema,
   kledoQueryOutputSchema,
   kledoReportNameSchema,
-  kledoReportInputSchema,
+  kledoReportToolInputSchema,
   kledoReportOutputSchema,
 } from '../tools/schemas.js'
 
@@ -165,8 +165,8 @@ export function createKledoMcpServer({ gateway }: CreateKledoMcpServerOptions): 
     {
       title: 'Run Kledo report',
       description:
-        `Run one allowlisted native Kledo financial or operational report. Prefer this tool for company totals, statements, receivables, payables, and period comparisons; do not reconstruct accounting statements from queried invoices. ${UNTRUSTED_DATA_WARNING}`,
-      inputSchema: kledoReportInputSchema,
+        `Run one allowlisted native Kledo financial or operational report, or an explicitly validated semantic adapter. Use sales_by_person for sales grouped by or filtered to a salesperson; it defaults to transaction date and resolves an exact salesperson name through Kledo users within the same MCP call. Use sales_order_kpi for bounded Sales Order deal intake by period and optional salesperson; its booked values are not revenue, invoices, or cash. Use income_by_customer only to group or rank customers, including when filtered by a salesperson. Use dormant_customers for bounded follow-up candidates with historical income but no recent income activity; it is not proof of churn and does not provide an exact last-purchase date. Use receivable_by_invoice when the answer needs customer totals, invoice numbers, and project/reference: it maps Kledo API memo to the Web UI Reference field and fully consumes each returned customer's invoice drill-down. Use item_price_analysis to keep catalog prices, latest transaction prices, and period profitability distinct; when a product name matches multiple products, retry with the exact productCode or SKU. Use sales_by_period only for time buckets. Prefer this tool for company totals, statements, receivables, payables, and period comparisons; do not reconstruct salesperson sales or accounting statements from queried invoices. ${UNTRUSTED_DATA_WARNING}`,
+      inputSchema: kledoReportToolInputSchema,
       outputSchema: kledoReportOutputSchema,
       annotations: READ_ONLY_ANNOTATIONS,
     },
