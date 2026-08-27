@@ -8,12 +8,12 @@
     "source": "github",
     "id": "1347890362"
   },
-  "version": "0.1.0",
+  "version": "0.1.0-rc.1",
   "packages": [
     {
       "registryType": "npm",
       "identifier": "kledo-mcp",
-      "version": "0.1.0",
+      "version": "0.1.0-rc.1",
       "transport": {
         "type": "stdio"
       },
