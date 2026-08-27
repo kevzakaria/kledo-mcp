@@ -1,0 +1,39 @@
+{
+  "$schema": "https://static.modelcontextprotocol.io/schemas/2025-12-11/server.schema.json",
+  "name": "io.github.kevzakaria/kledo-mcp",
+  "title": "Kledo MCP",
+  "description": "Read-only access to normalized Kledo accounting data through three bounded MCP tools.",
+  "repository": {
+    "url": "https://github.com/kevzakaria/kledo-mcp",
+    "source": "github",
+    "id": "1347890362"
+  },
+  "version": "0.1.0",
+  "packages": [
+    {
+      "registryType": "npm",
+      "identifier": "kledo-mcp",
+      "version": "0.1.0",
+      "transport": {
+        "type": "stdio"
+      },
+      "environmentVariables": [
+        {
+          "name": "KLEDO_API_BASE_URL",
+          "description": "Absolute HTTPS URL for the tenant's Kledo API v1 root.",
+          "format": "string",
+          "isRequired": true,
+          "isSecret": false,
+          "placeholder": "https://your-kledo-api-host/api/v1/"
+        },
+        {
+          "name": "KLEDO_API_TOKEN",
+          "description": "Bearer token authorized to read the configured Kledo tenant.",
+          "format": "string",
+          "isRequired": true,
+          "isSecret": true
+        }
+      ]
+    }
+  ]
+}

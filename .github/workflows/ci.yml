@@ -1,0 +1,144 @@
+name: CI
+
+on:
+  pull_request:
+  push:
+    branches:
+      - main
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  verify:
+    name: Node 22.19 verification
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+
+    steps:
+      - name: Check out source
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Reject private or credential material
+        env:
+          CURRENT_REF: ${{ github.head_ref || github.ref_name }}
+          PULL_REQUEST_TEXT: ${{ github.event.pull_request.title }} ${{ github.event.pull_request.body }}
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          forbidden_files='(^|/)\.env($|\.(dev|development|local|prod|production|staging|test)$)|\.(key|p12|pfx)$'
+          if git ls-files | grep -E "$forbidden_files" >/dev/null; then
+            echo 'Credential-bearing files must not be committed.' >&2
+            exit 1
+          fi
+
+          forbidden_values=(
+            '-----BEGIN (RSA |EC |OPENSSH |DSA )?PRIVATE KEY-----'
+            '(^|[^A-Za-z0-9])gh[pousr]_[A-Za-z0-9]{20,}'
+            '(^|[^A-Za-z0-9])github_pat_[A-Za-z0-9_]{20,}'
+            '(^|[^A-Za-z0-9])npm_[A-Za-z0-9]{20,}'
+            '(^|[^A-Za-z0-9])AKIA[0-9A-Z]{16}'
+            'Bearer[[:space:]]+[A-Za-z0-9._-]{24,}'
+            "KLEDO_API_TOKEN[[:space:]]*=[[:space:]]*['\"]?[A-Za-z0-9._-]{24,}"
+          )
+
+          for pattern in "${forbidden_values[@]}"; do
+            if git grep -qEI -- "$pattern"; then
+              echo 'Possible committed credential detected.' >&2
+              exit 1
+            fi
+          done
+
+          # Keep organization, workstation, and private-project identifiers out
+          # of the reusable OSS tree. String fragments avoid making the guard
+          # itself a match for the values it rejects.
+          forbidden_private_identifiers=(
+            'PT([[:space:]_.-]*)C''SS'
+            'Cepat([[:space:]_.-]*)Ser''vice'
+            'CSS''-IT'
+            '/Users''/'
+            'm4''mini'
+            'op:''//'
+            'doc''master'
+            'CSS([[:space:]_.-]*)A''I'
+          )
+
+          for pattern in "${forbidden_private_identifiers[@]}"; do
+            if git grep -qiEI -- "$pattern"; then
+              echo 'Private organization or integration identifier detected.' >&2
+              exit 1
+            fi
+            if printf '%s\n%s\n' "$CURRENT_REF" "$PULL_REQUEST_TEXT" | grep -qEi -- "$pattern"; then
+              echo 'Private identifier detected in branch or pull-request metadata.' >&2
+              exit 1
+            fi
+          done
+
+      - name: Set up Node.js
+        uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version: 22.19.0
+          cache: npm
+          cache-dependency-path: package-lock.json
+
+      - name: Install locked dependencies
+        run: npm ci --ignore-scripts
+
+      - name: Check registry metadata consistency
+        run: |
+          node --input-type=module <<'NODE'
+          import { readFile } from 'node:fs/promises'
+
+          const packageJson = JSON.parse(await readFile('package.json', 'utf8'))
+          const serverJson = JSON.parse(await readFile('server.json', 'utf8'))
+          const npmPackage = serverJson.packages?.find(
+            (candidate) => candidate.registryType === 'npm',
+          )
+
+          const checks = [
+            [serverJson.name === packageJson.mcpName, 'server name must match package.json mcpName'],
+            [serverJson.version === packageJson.version, 'server and package versions must match'],
+            [npmPackage?.identifier === packageJson.name, 'npm identifiers must match'],
+            [npmPackage?.version === packageJson.version, 'npm package versions must match'],
+          ]
+
+          const failures = checks.filter(([passed]) => !passed)
+          if (failures.length > 0) {
+            for (const [, message] of failures) console.error(message)
+            process.exit(1)
+          }
+          NODE
+
+      - name: Validate MCP Registry manifest
+        env:
+          MCP_PUBLISHER_VERSION: v1.8.1
+          MCP_PUBLISHER_SHA256: a06c9096dcb9727c13555b6be26c7effa707b01f06a4c561ba7a3635443cf2cc
+        run: |
+          archive="$RUNNER_TEMP/mcp-publisher.tar.gz"
+          install_dir="$RUNNER_TEMP/mcp-publisher"
+          mkdir -p "$install_dir"
+          curl --fail --silent --show-error --location \
+            "https://github.com/modelcontextprotocol/registry/releases/download/$MCP_PUBLISHER_VERSION/mcp-publisher_linux_amd64.tar.gz" \
+            --output "$archive"
+          printf '%s  %s\n' "$MCP_PUBLISHER_SHA256" "$archive" | sha256sum --check
+          tar -xzf "$archive" -C "$install_dir"
+          "$install_dir/mcp-publisher" validate
+
+      - name: Typecheck
+        run: npm run typecheck
+
+      - name: Test
+        run: npm test
+
+      - name: Build
+        run: npm run build
+
+      - name: Verify publish contents
+        run: npm pack --dry-run

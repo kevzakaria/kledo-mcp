@@ -1,0 +1,58 @@
+{
+  "name": "kledo-mcp",
+  "version": "0.1.0",
+  "description": "Minimal read-only MCP server for Kledo",
+  "mcpName": "io.github.kevzakaria/kledo-mcp",
+  "type": "module",
+  "license": "Apache-2.0",
+  "private": false,
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/kevzakaria/kledo-mcp.git"
+  },
+  "homepage": "https://github.com/kevzakaria/kledo-mcp#readme",
+  "keywords": [
+    "kledo",
+    "mcp",
+    "model-context-protocol",
+    "accounting",
+    "finance"
+  ],
+  "sideEffects": false,
+  "publishConfig": {
+    "access": "public"
+  },
+  "engines": {
+    "node": ">=22.19.0"
+  },
+  "bin": {
+    "kledo-mcp": "./dist/bin/stdio.js"
+  },
+  "files": [
+    "dist",
+    "README.md",
+    "LICENSE",
+    "NOTICE",
+    "SECURITY.md",
+    "server.json"
+  ],
+  "scripts": {
+    "build": "tsc -p tsconfig.build.json",
+    "pretest": "npm run build",
+    "prepack": "npm run build",
+    "typecheck": "tsc --noEmit",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "start": "node dist/bin/stdio.js"
+  },
+  "dependencies": {
+    "@modelcontextprotocol/server": "2.0.0",
+    "zod": "4.4.3"
+  },
+  "devDependencies": {
+    "@modelcontextprotocol/client": "2.0.0",
+    "@types/node": "22.20.1",
+    "typescript": "6.0.3",
+    "vitest": "4.1.11"
+  }
+}
