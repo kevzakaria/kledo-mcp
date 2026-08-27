@@ -52,7 +52,8 @@
     "prepack": "npm run build",
     "setup": "bash scripts/setup.sh",
     "typecheck": "tsc --noEmit",
-    "test": "vitest run",
+    "test": "vitest run && npm run test:wizard",
+    "test:wizard": "node test/setup-wizard.mjs",
     "test:watch": "vitest",
     "start": "node dist/bin/stdio.js"
   },
