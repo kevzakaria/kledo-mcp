@@ -31,16 +31,26 @@
   "files": [
     ".env.example",
     "dist",
+    "docs/architecture.md",
+    "docs/assets/kledo-mcp-banner.png",
+    "docs/client-setup.md",
+    "docs/configuration.md",
+    "docs/releasing.md",
+    "docs/tool-reference.md",
     "README.md",
+    "README.id.md",
     "LICENSE",
     "NOTICE",
     "SECURITY.md",
-    "server.json"
+    "server.json",
+    "scripts/setup.sh"
   ],
   "scripts": {
     "build": "tsc -p tsconfig.build.json",
+    "config:check": "node --env-file=.env dist/bin/check-config.js",
     "pretest": "npm run build",
     "prepack": "npm run build",
+    "setup": "bash scripts/setup.sh",
     "typecheck": "tsc --noEmit",
     "test": "vitest run",
     "test:watch": "vitest",
