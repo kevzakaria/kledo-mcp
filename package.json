@@ -29,6 +29,7 @@
     "kledo-mcp": "./dist/bin/stdio.js"
   },
   "files": [
+    ".env.example",
     "dist",
     "README.md",
     "LICENSE",

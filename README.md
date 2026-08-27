@@ -135,6 +135,34 @@ Kledo MCP reads exactly two environment variables:
 | `KLEDO_API_BASE_URL` | Yes | Absolute HTTPS URL ending at the tenant's Kledo API v1 root |
 | `KLEDO_API_TOKEN` | Yes | Kledo bearer token; a leading `Bearer ` prefix is accepted and normalized |
 
+### Secret-manager agnostic by design
+
+The server has no built-in dependency on 1Password, dotenv, or any other secret
+manager. It reads the two variables above from its process environment and does
+not auto-discover or parse `.env` files.
+
+```text
+shell export / MCP client env / .env loader / secret-manager exec
+                              |
+                              v
+                  KLEDO_API_BASE_URL + KLEDO_API_TOKEN
+                              |
+                              v
+                         kledo-mcp
+```
+
+Use whichever mechanism fits the host:
+
+- export the variables in the shell or service manager that launches the MCP;
+- let the MCP client inject private `env` values or inherit named variables;
+- use a dotenv-compatible runner of your choice to launch the process; or
+- use a secret manager's `run`/`exec` feature to inject the same variables.
+
+The tracked [`.env.example`](./.env.example) contains placeholders only. A local
+`.env` file is gitignored, but creating it alone does not configure the server;
+load it with the user's chosen environment manager. Prefer a private path with
+owner-only permissions, and never place the token in command-line arguments.
+
 Copy the API endpoint shown in the tenant's Kledo **Open API** integration page,
 then use its `/api/v1/` root. Kledo tenants can use `api.kledo.com`, a Kledo
 subdomain, or a company-specific API hostname. For example:
