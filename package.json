@@ -55,6 +55,7 @@
     "test": "vitest run && npm run test:wizard",
     "test:wizard": "node test/setup-wizard.mjs",
     "test:watch": "vitest",
+    "warmup": "npm run build && node --disable-warning=ExperimentalWarning --env-file=.env dist/bin/warmup-identities.js",
     "start": "node dist/bin/stdio.js"
   },
   "dependencies": {

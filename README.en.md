@@ -61,10 +61,22 @@ npm ci
 npm run setup
 ```
 
-The setup wizard builds the server, guides you to **Settings > Integration >
-Open API**, accepts the token through hidden terminal input, writes a
+The setup wizard builds the server, opens **Settings > Integration > Open API**
+directly, accepts the token through hidden terminal input, writes a
 gitignored `.env` with owner-only permissions, and validates the local
 configuration without making a Kledo API request.
+
+To populate the tenant reference-ID catalogs before the first MCP query, run:
+
+```bash
+npm run warmup
+```
+
+This reads the allowlisted, read-only master data for salespersons, contacts and
+their types, contact groups, products and categories, warehouses, units, and
+finance accounts. Local SQLite stores only sanitized IDs, display names, active
+states, tenant scope, and timestamps. Output is limited to counts by kind and
+the refresh time.
 
 Then add the generated command to your MCP client. Copy-ready examples are
 available for [Hermes, Codex, Claude Desktop, and Cursor](docs/client-setup.md).
@@ -88,7 +100,8 @@ Install and configure kledo-mcp from https://github.com/kevzakaria/kledo-mcp.
 
 Prefer another secret manager or a manually managed environment? Read
 [configuration and secret handling](docs/configuration.md). The server only
-reads `KLEDO_API_BASE_URL` and `KLEDO_API_TOKEN` from its process environment.
+reads `KLEDO_API_BASE_URL`, `KLEDO_API_TOKEN`, and the optional
+`KLEDO_STATE_DIR` from its process environment.
 
 ## Three read-only tools
 
@@ -103,7 +116,9 @@ call, send messages, export files, or issue arbitrary HTTP requests. Read the
 [tool reference](docs/tool-reference.md) for supported entities, reports,
 examples, and current implementation status.
 
-## Documentation
+Sanitized master-reference mappings are stored in a tenant-scoped local SQLite catalog. Run `npm run warmup` to prefetch them without adding another MCP tool.
+
+## Documentation## Documentation
 
 | Guide | Contents |
 | --- | --- |

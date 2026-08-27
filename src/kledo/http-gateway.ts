@@ -5,6 +5,11 @@ import { z } from 'zod'
 import { compareDecimals, decimalString } from '../domain/decimal.js'
 import type { JsonValue } from '../domain/json.js'
 import {
+  createSqliteTenantIdentityCatalog,
+  identityEntityTypes,
+  type IdentityEntityType,
+} from '../identity/tenant-identity-catalog.js'
+import {
   decimalSchema,
   entityDefinitions,
   exactIdSchema,
@@ -189,6 +194,73 @@ const rawNativeReportPageEnvelopeSchema = z.object({
   }),
 })
 
+const rawKledoUserSchema = z
+  .object({
+    id: exactIdSchema.refine((value) => /^[1-9]\d{0,19}$/.test(String(value))),
+    name: z.string().trim().min(1),
+    is_active: z.boolean().default(true),
+  })
+  .passthrough()
+
+const rawUsersEnvelopeSchema = z.object({
+  success: z.literal(true),
+  data: z.union([
+    z.array(rawKledoUserSchema),
+    z
+      .object({
+        data: z.array(rawKledoUserSchema),
+      })
+      .passthrough(),
+  ]),
+})
+
+const rawIdentityContactSchema = z
+  .object({
+    id: exactIdSchema.refine((value) => /^[1-9]\d{0,19}$/.test(String(value))),
+    name: z.string().nullable().optional(),
+    company: z.string().nullable().optional(),
+    type_ids: z.array(exactIdSchema),
+    is_archive: z.union([z.boolean(), z.literal(0), z.literal(1)]).nullable().optional(),
+  })
+  .passthrough()
+
+const rawIdentityNamedRecordSchema = z
+  .object({
+    id: exactIdSchema.refine((value) => /^[1-9]\d{0,19}$/.test(String(value))),
+    name: z.string().trim().min(1),
+    is_archive: z.union([z.boolean(), z.literal(0), z.literal(1)]).nullable().optional(),
+    deleted_at: z.unknown().nullable().optional(),
+  })
+  .passthrough()
+
+const rawIdentityArrayEnvelopeSchema = z.object({
+  success: z.literal(true),
+  data: z.union([
+    z.array(z.unknown()),
+    z
+      .object({
+        data: z.array(z.unknown()),
+      })
+      .passthrough(),
+  ]),
+})
+
+interface RawProductCategory {
+  id: string | number
+  name: string
+  children: RawProductCategory[]
+}
+
+const rawProductCategorySchema: z.ZodType<RawProductCategory> = z.lazy(() =>
+  z
+    .object({
+      id: exactIdSchema.refine((value) => /^[1-9]\d{0,19}$/.test(String(value))),
+      name: z.string().trim().min(1),
+      children: z.array(rawProductCategorySchema).default([]),
+    })
+    .passthrough(),
+)
+
 interface JsonParseSourceContext {
   source?: string
 }
@@ -226,8 +298,26 @@ export interface CreateKledoHttpGatewayOptions {
   timeoutMs?: number
   maxAttempts?: number
   maxResponseBytes?: number
+  identityCatalogPath?: string
+  diagnostic?: (event: KledoGatewayDiagnosticEvent) => void
   maxConcurrency?: number
   sleep?: (milliseconds: number) => Promise<void>
+}
+
+export interface KledoIdentityWarmupResult {
+  counts: Record<IdentityEntityType, number>
+  fetchedAt: string
+}
+
+export interface KledoHttpGateway extends KledoGateway {
+  warmIdentityCatalog(signal?: AbortSignal): Promise<KledoIdentityWarmupResult>
+}
+
+export interface KledoGatewayDiagnosticEvent {
+  event:
+    | 'identity.sqlite.write'
+    | 'identity.sqlite.write_failed'
+    | 'identity.upstream.refresh'
 }
 
 function assertBaseUrl(url: URL, allowInsecureLoopback: boolean): void {
@@ -509,7 +599,7 @@ function oneId(values: string[] | undefined, field: string): string | undefined 
   return values[0]
 }
 
-export function createKledoHttpGateway(options: CreateKledoHttpGatewayOptions): KledoGateway {
+export function createKledoHttpGateway(options: CreateKledoHttpGatewayOptions): KledoHttpGateway {
   const baseUrl = normalizedBaseUrl(options.baseUrl)
   const token = options.token.replace(/^Bearer\s+/i, '').trim()
   assertBaseUrl(baseUrl, options.allowInsecureLoopback === true)
@@ -524,6 +614,24 @@ export function createKledoHttpGateway(options: CreateKledoHttpGatewayOptions): 
     options.sleep ??
     ((milliseconds: number) => new Promise<void>((resolve) => setTimeout(resolve, milliseconds)))
   const cursorKey = createHmac('sha256', token).update('kledo-mcp cursor signing key v1').digest()
+  const identityCatalog = options.identityCatalogPath
+    ? createSqliteTenantIdentityCatalog({
+        path: options.identityCatalogPath,
+        tenantKey: createHmac('sha256', token)
+          .update(`kledo-mcp identity tenant scope v1\0${baseUrl.origin}`)
+          .digest('hex'),
+      })
+    : undefined
+  const emitDiagnostic = (event: KledoGatewayDiagnosticEvent['event']): void => {
+    try {
+      options.diagnostic?.({ event })
+    } catch {
+      // Diagnostics must never affect a read-only tool result.
+    }
+  }
+  type CachedIdentity = { id: string; name: string; active: boolean }
+  type CachedContact = CachedIdentity & { typeIds: readonly string[] }
+
 
   if (!Number.isInteger(maxAttempts) || maxAttempts < 1 || maxAttempts > 5) {
     throw new Error('maxAttempts must be an integer between 1 and 5')
@@ -761,7 +869,241 @@ export function createKledoHttpGateway(options: CreateKledoHttpGatewayOptions): 
     }
   }
 
+  const fetchSalespersons = async (signal?: AbortSignal): Promise<readonly CachedIdentity[]> => {
+    emitDiagnostic('identity.upstream.refresh')
+    const body = await requestJson(new URL('users', baseUrl), signal)
+    const envelope = rawUsersEnvelopeSchema.parse(body)
+    const rows = Array.isArray(envelope.data) ? envelope.data : envelope.data.data
+    if (rows.length > 10_000) {
+      throw new KledoError('SCHEMA_MISMATCH', 'Kledo returned too many users to resolve safely')
+    }
+    return rows.map((user) => ({
+      id: String(user.id),
+      name: user.name,
+      active: user.is_active,
+    }))
+  }
+
+  const fetchPaginatedIdentityRows = async (
+    path: string,
+    signal?: AbortSignal,
+  ): Promise<readonly unknown[]> => {
+    const rows: unknown[] = []
+    const pageSize = 100
+    const maxRecords = 10_000
+    let requestedPage = 1
+
+    while (true) {
+      const url = new URL(path, baseUrl)
+      url.searchParams.set('per_page', String(pageSize))
+      url.searchParams.set('page', String(requestedPage))
+      emitDiagnostic('identity.upstream.refresh')
+      const body = await requestJson(url, signal)
+      const envelope = rawEntityPageEnvelopeSchema.parse(body)
+      const page = envelope.data
+      assertConsistentPagination(page)
+      if (page.current_page !== requestedPage || page.total > maxRecords) {
+        throw new KledoError('SCHEMA_MISMATCH', 'Kledo returned an invalid identity catalog')
+      }
+      rows.push(...page.data)
+      if (rows.length > maxRecords) {
+        throw new KledoError('SCHEMA_MISMATCH', 'Kledo returned too many identities to store safely')
+      }
+      if (page.current_page >= page.last_page) break
+      requestedPage += 1
+    }
+
+    return rows
+  }
+
+  const fetchIdentityArrayRows = async (
+    path: string,
+    signal?: AbortSignal,
+  ): Promise<readonly unknown[]> => {
+    emitDiagnostic('identity.upstream.refresh')
+    const body = await requestJson(new URL(path, baseUrl), signal)
+    const envelope = rawIdentityArrayEnvelopeSchema.parse(body)
+    const rows = Array.isArray(envelope.data) ? envelope.data : envelope.data.data
+    if (rows.length > 10_000) {
+      throw new KledoError('SCHEMA_MISMATCH', 'Kledo returned too many identities to store safely')
+    }
+    return rows
+  }
+
+  const activeFromArchive = (value: boolean | 0 | 1 | null | undefined): boolean =>
+    value === undefined || value === null || value === false || value === 0
+
+  const fetchContacts = async (signal?: AbortSignal): Promise<readonly CachedContact[]> => {
+    const rows = await fetchPaginatedIdentityRows('finance/contacts', signal)
+    const allowedTypeIds = new Set(['1', '2', '3', '4', '5'])
+    return rows.map((value) => {
+      const contact = rawIdentityContactSchema.parse(value)
+      const contactName = contact.company?.trim() || contact.name?.trim()
+      const typeIds = contact.type_ids.map(String)
+      if (!contactName) {
+        throw new KledoError('SCHEMA_MISMATCH', 'Kledo returned an unnamed contact')
+      }
+      if (typeIds.length === 0 || typeIds.some((typeId) => !allowedTypeIds.has(typeId))) {
+        throw new KledoError('SCHEMA_MISMATCH', 'Kledo returned an invalid contact type')
+      }
+      return {
+        id: String(contact.id),
+        name: contactName,
+        active: activeFromArchive(contact.is_archive),
+        typeIds,
+      }
+    })
+  }
+
+  const namedIdentities = (
+    rows: readonly unknown[],
+    activeFrom: 'archive' | 'deleted' | 'always',
+  ): readonly CachedIdentity[] =>
+    rows.map((value) => {
+      const record = rawIdentityNamedRecordSchema.parse(value)
+      return {
+        id: String(record.id),
+        name: record.name,
+        active:
+          activeFrom === 'archive'
+            ? activeFromArchive(record.is_archive)
+            : activeFrom === 'deleted'
+              ? record.deleted_at === undefined || record.deleted_at === null
+              : true,
+      }
+    })
+
+  const fetchNamedPaginatedCatalog = async (
+    path: string,
+    activeFrom: 'archive' | 'deleted',
+    signal?: AbortSignal,
+  ): Promise<readonly CachedIdentity[]> =>
+    namedIdentities(await fetchPaginatedIdentityRows(path, signal), activeFrom)
+
+  const fetchNamedArrayCatalog = async (
+    path: string,
+    activeFrom: 'archive' | 'always',
+    signal?: AbortSignal,
+  ): Promise<readonly CachedIdentity[]> =>
+    namedIdentities(await fetchIdentityArrayRows(path, signal), activeFrom)
+
+  const fetchProductCategories = async (
+    signal?: AbortSignal,
+  ): Promise<readonly CachedIdentity[]> => {
+    const roots = z
+      .array(rawProductCategorySchema)
+      .parse(await fetchIdentityArrayRows('finance/productCategories', signal))
+    const identities: CachedIdentity[] = []
+    const visit = (category: RawProductCategory): void => {
+      identities.push({ id: String(category.id), name: category.name, active: true })
+      for (const child of category.children) visit(child)
+    }
+    for (const root of roots) visit(root)
+    if (identities.length > 10_000) {
+      throw new KledoError('SCHEMA_MISMATCH', 'Kledo returned too many identities to store safely')
+    }
+    return identities
+  }
+
+  const replaceIdentitySnapshots = async (
+    snapshots: readonly {
+      entityType: IdentityEntityType
+      identities: readonly CachedIdentity[]
+    }[],
+    fetchedAt: Date,
+  ): Promise<boolean> => {
+    if (!identityCatalog) return false
+    await identityCatalog.replaceSnapshots(
+      snapshots.map((snapshot) => ({
+        entityType: snapshot.entityType,
+        identities: snapshot.identities.map((identity) => ({
+          externalId: identity.id,
+          displayName: identity.name,
+          normalizedName: identity.name.trim().toLocaleLowerCase('en-US'),
+          active: identity.active,
+        })),
+      })),
+      fetchedAt,
+    )
+    emitDiagnostic('identity.sqlite.write')
+    return true
+  }
+
   return {
+    async warmIdentityCatalog(signal?: AbortSignal): Promise<KledoIdentityWarmupResult> {
+      if (!identityCatalog) {
+        throw new KledoError('INTERNAL_ERROR', 'Local identity catalog is not configured')
+      }
+      const fetchedAt = now()
+      const users = await fetchSalespersons(signal)
+      const contacts = await fetchContacts(signal)
+      const contactGroups = await fetchNamedArrayCatalog(
+        'finance/contactGroups',
+        'always',
+        signal,
+      )
+      const products = await fetchNamedPaginatedCatalog('finance/products', 'archive', signal)
+      const productCategories = await fetchProductCategories(signal)
+      const warehouses = await fetchNamedArrayCatalog('finance/warehouses', 'archive', signal)
+      const units = await fetchNamedPaginatedCatalog('finance/units', 'deleted', signal)
+      const accounts = await fetchNamedPaginatedCatalog('finance/accounts', 'archive', signal)
+      const contactTypes: readonly CachedIdentity[] = [
+        { id: '1', name: 'Vendor', active: true },
+        { id: '2', name: 'Employee', active: true },
+        { id: '3', name: 'Customer', active: true },
+        { id: '4', name: 'Other', active: true },
+        { id: '5', name: 'Investor', active: true },
+      ]
+      const snapshots: readonly {
+        entityType: IdentityEntityType
+        identities: readonly CachedIdentity[]
+      }[] = [
+        { entityType: 'salesperson', identities: users },
+        { entityType: 'contact', identities: contacts },
+        {
+          entityType: 'customer',
+          identities: contacts.filter((item) => item.typeIds.includes('3')),
+        },
+        { entityType: 'vendor', identities: contacts.filter((item) => item.typeIds.includes('1')) },
+        {
+          entityType: 'employee',
+          identities: contacts.filter((item) => item.typeIds.includes('2')),
+        },
+        {
+          entityType: 'investor',
+          identities: contacts.filter((item) => item.typeIds.includes('5')),
+        },
+        {
+          entityType: 'other_contact',
+          identities: contacts.filter((item) => item.typeIds.includes('4')),
+        },
+        { entityType: 'contact_type', identities: contactTypes },
+        { entityType: 'contact_group', identities: contactGroups },
+        { entityType: 'product', identities: products },
+        { entityType: 'product_category', identities: productCategories },
+        { entityType: 'warehouse', identities: warehouses },
+        { entityType: 'unit', identities: units },
+        { entityType: 'account', identities: accounts },
+      ]
+      try {
+        await replaceIdentitySnapshots(snapshots, fetchedAt)
+      } catch {
+        emitDiagnostic('identity.sqlite.write_failed')
+        throw new KledoError('INTERNAL_ERROR', 'Could not update local identity catalog')
+      }
+      const snapshotByType = new Map(snapshots.map((snapshot) => [snapshot.entityType, snapshot]))
+      const counts = Object.fromEntries(
+        identityEntityTypes.map((entityType) => [
+          entityType,
+          snapshotByType.get(entityType)?.identities.length ?? 0,
+        ]),
+      ) as Record<IdentityEntityType, number>
+      return {
+        counts,
+        fetchedAt: fetchedAt.toISOString(),
+      }
+    },
+
     async query(input: KledoQueryInput, signal?: AbortSignal): Promise<KledoQueryOutput> {
       const definition = entityDefinitions[input.entity]
       if (input.search && !definition.supportsSearch) {

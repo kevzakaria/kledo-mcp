@@ -40,14 +40,17 @@ The wizard performs three stages:
 | Validate and connect | Runs the same configuration validation used by the production server | sanitized success or failure |
 
 The wizard never calls a Kledo data endpoint and never writes a GitHub Actions
-secret. CI uses synthetic fixtures and does not need a production credential.
+secret. It prints an optional identity warm-up command after local validation.
+CI uses synthetic fixtures and does not need a production credential.
 
 ## Finding the Kledo values
 
 Kledo's published integration journey is:
 
-1. sign in to the intended tenant at [app.kledo.com](https://app.kledo.com/);
-2. open **Settings > Integration > Open API**;
+1. open the intended tenant's
+   [Settings > Integration > Open API](https://app.kledo.com/#/settings/apps?activeKey=6)
+   page and sign in if prompted;
+2. confirm that the intended tenant is active;
 3. use the API hostname shown by the API documentation link;
 4. configure the root as `https://<your-kledo-api-host>/api/v1/`; and
 5. create or copy the Open API token.
@@ -61,6 +64,7 @@ for the generated bearer token.
 | --- | :---: | --- |
 | `KLEDO_API_BASE_URL` | Yes | Absolute HTTPS URL ending at the tenant API v1 root |
 | `KLEDO_API_TOKEN` | Yes | Kledo bearer token; a leading `Bearer ` prefix is accepted and normalized |
+| `KLEDO_STATE_DIR` | No | Absolute private directory for the local SQLite identity catalog |
 
 The base URL must:
 
@@ -73,6 +77,59 @@ The base URL must:
 The server sends the bearer token only to the configured origin. Redirects to a
 different origin are rejected.
 
+## Local identity catalog
+
+The server keeps sanitized Kledo master-reference mappings in
+`identity-catalog.sqlite`. This lets a new MCP process resolve an exact
+salesperson name to its Kledo ID without reloading `/users` while the snapshot
+is fresh. Other kinds are prefetched for future ID-based routing but are not
+exposed through another public MCP tool.
+
+| Catalog kind | Read-only source |
+| --- | --- |
+| `salesperson` | `/users` |
+| `contact`, `customer`, `vendor`, `employee`, `investor`, `other_contact` | paginated `/finance/contacts`, split by `type_ids` 1 through 5 |
+| `contact_type` | Kledo contact types 1 Vendor, 2 Employee, 3 Customer, 4 Other, 5 Investor |
+| `contact_group` | `/finance/contactGroups` |
+| `product` | paginated `/finance/products` |
+| `product_category` | `/finance/productCategories`, including nested children |
+| `warehouse` | `/finance/warehouses` |
+| `unit` | paginated `/finance/units` |
+| `account` | paginated `/finance/accounts` |
+
+The default directory is:
+
+- `~/Library/Application Support/kledo-mcp` on macOS;
+- `$XDG_STATE_HOME/kledo-mcp` when `XDG_STATE_HOME` is set; or
+- `~/.local/state/kledo-mcp` on other supported systems.
+
+Set `KLEDO_STATE_DIR` to an absolute private directory to override the default.
+The database stores only a pseudonymous tenant scope, entity type, external ID,
+display name, normalized name, active flag, and refresh timestamps. It does not
+store the bearer token, email address, phone number, address, tax data, raw
+Kledo response, or transaction data.
+
+Tenant scope is derived one-way from the configured API origin and token. A
+token rotation therefore causes a safe cold refresh instead of reusing an old
+credential scope. If SQLite is unavailable, name resolution falls back to the
+live `/users` endpoint and the tool result includes a sanitized warning.
+
+To populate or refresh the catalog explicitly after `.env` is configured:
+
+```bash
+npm run warmup
+```
+
+The command validates every source above and atomically replaces all
+tenant-scoped snapshots. Its output is limited to stored record counts by kind
+and the refresh timestamp. It does not expose a fourth MCP tool and does not
+print names, IDs, URLs, credentials, or raw Kledo data.
+
+Transaction/document IDs are intentionally excluded. Transaction-specific
+status IDs, finance-account categories, and bank-transaction type IDs also stay
+unmapped until a stable read-only label source is validated; warm-up does not
+scan accounting transactions to infer reference data.
+
 ## Manual local setup
 
 Copy the placeholder file, fill it only on your machine, then lock its
@@ -83,6 +140,7 @@ cp .env.example .env
 chmod 600 .env
 npm run build
 npm run config:check
+npm run warmup
 ```
 
 The tracked [`.env.example`](../.env.example) contains placeholders only. Local
@@ -134,4 +192,6 @@ kledo_sinar_abadi -> process B -> tenant B URL and token
 ```
 
 There is intentionally no tenant selector in any MCP tool. See
-[client setup](client-setup.md) for registration examples.
+[client setup](client-setup.md) for registration examples. Separate processes
+may share the default SQLite file because every identity row is isolated by its
+pseudonymous tenant scope.

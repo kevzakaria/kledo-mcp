@@ -251,9 +251,9 @@ npm run build
 
 stage "Kledo Open API credentials" 3
 say "The values are stored only in your local env file. The token stays hidden while you type."
-open_url "https://app.kledo.com/"
+open_url "https://app.kledo.com/#/settings/apps?activeKey=6"
 step "Sign in to the Kledo tenant you want this MCP process to read."
-step "Open Settings, then Integration, then Open API."
+step "The browser opens Settings, then Integration, then Open API directly."
 step "Use the API hostname shown there and enter its HTTPS /api/v1/ root below."
 note "Example: https://your-kledo-api-host/api/v1/"
 
@@ -290,6 +290,10 @@ node --env-file="$ENV_FILE" dist/bin/check-config.js
 
 ENV_FILE_ABSOLUTE=$(node -e 'console.log(require("node:path").resolve(process.argv[1]))' "$ENV_FILE")
 SERVER_ABSOLUTE="$REPO_ROOT/dist/bin/stdio.js"
+WARMUP_ABSOLUTE="$REPO_ROOT/dist/bin/warmup-identities.js"
+printf '\n'
+say "Optional: prefetch the sanitized tenant reference catalogs now:"
+note "node --disable-warning=ExperimentalWarning --env-file=$ENV_FILE_ABSOLUTE $WARMUP_ABSOLUTE"
 printf '\n'
 say "Use this command in an MCP client that accepts a command and arguments:"
 note "node --env-file=$ENV_FILE_ABSOLUTE $SERVER_ABSOLUTE"
