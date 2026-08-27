@@ -48,7 +48,12 @@ opaque continuation `cursor`.
 Retrieves one normalized record by entity and numeric Kledo ID. Optional
 `line_items` and `relation_ids` includes are bounded; relationships are returned
 only when already present in the Kledo detail response and are not recursively
-followed.
+followed. For `sales_invoice`, the optional `invoice_payments` include returns
+bounded child Invoice Payment transactions (`IP`, Kledo transaction type 17),
+including payment date, amount, and destination bank account when Kledo provides
+it. This is direct IP event history, not an authoritative fully-paid/settlement
+date: credits and non-IP child transaction types are outside this include.
+`invoicePaymentLimit` defaults to 50 and is capped at 200.
 
 ### `kledo_report`
 
@@ -279,6 +284,7 @@ The chat client chooses a tool; users do not need to know Kledo endpoint names.
 | “Show the latest 20 sales invoices.” | `kledo_query` |
 | “Find invoices for PT Maju Jaya.” | `kledo_query` |
 | “Show the line items for invoice ID 123.” | `kledo_get` |
+| “List direct Invoice Payment events and destination accounts for invoice ID 123.” | `kledo_get` with `invoice_payments` |
 | “What is the aged receivable position as of today?” | `kledo_report` |
 | “Compare sales this month with last month.” | `kledo_report` |
 
@@ -303,6 +309,13 @@ Version `0.1.0` implements the complete allowlisted catalog shown above:
   detail GET;
 - bounded `line_items` and directly present `relation_ids` are available for
   transaction documents, without recursive graph requests;
+- sales-invoice detail can include bounded, deduplicated `invoice_payments` from
+  Kledo's child-transactions endpoint; non-Invoice-Payment transaction types are
+  excluded and parent/account ID inconsistencies fail safely. Kledo's
+  [public OpenAPI](https://api.kledo.com/documentation/scalar/spec?app_code=finance)
+  lists this endpoint but does not define its response rows, so the
+  adapter follows verified response behavior and fails closed if that shape
+  changes;
 - `kledo_report` routes all 11 reports to Kledo's native report endpoints;
   paginated reports return signed cursors and non-paginated financial statements
   are never reconstructed from transaction pages;

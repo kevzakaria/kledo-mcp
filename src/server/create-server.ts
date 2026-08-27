@@ -81,6 +81,9 @@ function compactTextMirror(value: object): string {
   if (Array.isArray(record.items)) facts.push(`items=${record.items.length}`)
   if (Array.isArray(record.data)) facts.push(`rows=${record.data.length}`)
   if (Array.isArray(record.lineItems)) facts.push(`lineItems=${record.lineItems.length}`)
+  if (Array.isArray(record.invoicePayments)) {
+    facts.push(`invoicePayments=${record.invoicePayments.length}`)
+  }
 
   const complete = objectRecord(record.meta)?.complete
   const hasMore = objectRecord(record.pageInfo)?.hasMore
@@ -134,7 +137,7 @@ export function createKledoMcpServer({ gateway }: CreateKledoMcpServerOptions): 
     {
       title: 'Get Kledo record',
       description:
-        `Retrieve one normalized Kledo record by entity and numeric ID. Use after kledo_query when the user needs line items or relationship IDs. ${UNTRUSTED_DATA_WARNING}`,
+        `Retrieve one normalized Kledo record by entity and numeric ID. Use after kledo_query when the user needs line items, relationship IDs, or direct child Invoice Payment transactions for a sales invoice. The invoice_payments include returns only Kledo transaction type 17; each transactionDate is that direct payment event date, not the invoice's authoritative final settlement or paid date, and other child transaction types are excluded. ${UNTRUSTED_DATA_WARNING}`,
       inputSchema: kledoGetInputSchema,
       outputSchema: kledoGetOutputSchema,
       annotations: READ_ONLY_ANNOTATIONS,

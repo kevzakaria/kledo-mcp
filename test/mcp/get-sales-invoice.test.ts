@@ -15,17 +15,62 @@ describe('kledo_get sales invoice', () => {
     await Promise.allSettled(closeables.splice(0).map((closeable) => closeable.close()))
   })
 
-  it('returns normalized detail, bounded line items, relation IDs, and no contact PII', async () => {
+  it('returns normalized detail, bounded line items, relation IDs, invoice payments, and no contact PII', async () => {
+    const requestedUrls: string[] = []
     const upstream = createServer((request, response) => {
-      if (
-        request.url !== '/api/v1/finance/invoices/9223372036854775807' ||
-        request.headers.authorization !== 'Bearer fixture-secret'
-      ) {
+      requestedUrls.push(request.url ?? '')
+      if (request.headers.authorization !== 'Bearer fixture-secret') {
         response.writeHead(404).end()
         return
       }
 
       response.setHeader('content-type', 'application/json')
+      if (request.url === '/api/v1/finance/invoices/9223372036854775807/transactions') {
+        const firstPayment = {
+          id: 801,
+          business_tran_id: '9223372036854775807',
+          trans_type_id: 17,
+          trans_date: '2026-08-10',
+          amount_after_tax: '500000.00',
+          status_id: 3,
+          bank_account_id: 77,
+          payment_type_id: null,
+          bank_account: {
+            id: 77,
+            name: 'Bank Maju',
+            currency_id: 1,
+            currency: { id: 1, code: 'IDR', name: 'Indonesian Rupiah' },
+          },
+        }
+        response.end(
+          JSON.stringify({
+            success: true,
+            data: [
+              {
+                id: 802,
+                business_tran_id: '9223372036854775807',
+                trans_type_id: 17,
+                trans_date: '2026-08-10',
+                amount_after_tax: '500000.00',
+                status_id: null,
+                bank_account_id: 78,
+                payment_type_id: 4,
+                bank_account: { id: 78, name: 'Kas Utama' },
+              },
+              firstPayment,
+              { ...firstPayment },
+              { trans_type_id: 6 },
+            ],
+          }),
+        )
+        return
+      }
+
+      if (request.url !== '/api/v1/finance/invoices/9223372036854775807') {
+        response.writeHead(404).end()
+        return
+      }
+
       response.end(
         JSON.stringify({
           success: true,
@@ -121,8 +166,9 @@ describe('kledo_get sales invoice', () => {
       arguments: {
         entity: 'sales_invoice',
         id: '9223372036854775807',
-        include: ['line_items', 'relation_ids'],
+        include: ['line_items', 'relation_ids', 'invoice_payments'],
         lineItemLimit: 1,
+        invoicePaymentLimit: 1,
       },
     })
 
@@ -193,7 +239,28 @@ describe('kledo_get sales invoice', () => {
         },
       ],
       relations: [{ relation: 'derived_from', entity: 'sales_order', id: '99' }],
-      truncation: { lineItems: true, omittedCount: 1 },
+      invoicePayments: [
+        {
+          id: '801',
+          invoiceId: '9223372036854775807',
+          transactionDate: '2026-08-10',
+          amount: {
+            amount: '500000.00',
+            currency: 'IDR',
+            currencyId: '1',
+            currencyName: 'Indonesian Rupiah',
+          },
+          statusId: '3',
+          bankAccount: { id: '77', name: 'Bank Maju' },
+          paymentTypeId: null,
+        },
+      ],
+      truncation: {
+        lineItems: true,
+        omittedCount: 1,
+        invoicePayments: true,
+        omittedInvoicePaymentCount: 1,
+      },
       meta: {
         fetchedAt: '2026-08-27T01:00:00.000Z',
         tenant: 'fixture-tenant',
@@ -203,6 +270,131 @@ describe('kledo_get sales invoice', () => {
     expect(JSON.stringify(result.structuredContent)).not.toContain('private@')
     expect(JSON.stringify(result.structuredContent)).not.toContain('private-tax-id')
     expect(JSON.stringify(result.structuredContent)).not.toContain('private address')
+
+    const completePayments = await client.callTool({
+      name: 'kledo_get',
+      arguments: {
+        entity: 'sales_invoice',
+        id: '9223372036854775807',
+        include: ['invoice_payments'],
+        invoicePaymentLimit: 2,
+      },
+    })
+    expect(completePayments.isError).not.toBe(true)
+    expect(completePayments.structuredContent).toMatchObject({
+      invoicePayments: [
+        { id: '801', amount: { currency: 'IDR' } },
+        { id: '802', amount: { currency: null }, paymentTypeId: '4' },
+      ],
+      truncation: { invoicePayments: false },
+    })
+
+    const childRequestCount = requestedUrls.filter((url) => url.endsWith('/transactions')).length
+    const detailWithoutPayments = await client.callTool({
+      name: 'kledo_get',
+      arguments: { entity: 'sales_invoice', id: '9223372036854775807' },
+    })
+    expect(detailWithoutPayments.isError).not.toBe(true)
+    expect(requestedUrls.filter((url) => url.endsWith('/transactions'))).toHaveLength(
+      childRequestCount,
+    )
+  })
+
+  it('rejects inconsistent invoice payment parent, duplicate, and bank IDs', async () => {
+    const upstream = createServer((request, response) => {
+      response.setHeader('content-type', 'application/json')
+      const match = request.url?.match(/^\/api\/v1\/finance\/invoices\/(101|102|103)(\/transactions)?$/)
+      if (!match) {
+        response.writeHead(404).end()
+        return
+      }
+      const invoiceId = match[1]!
+      if (!match[2]) {
+        response.end(
+          JSON.stringify({
+            success: true,
+            data: {
+              id: invoiceId,
+              ref_number: `INV/2026/${invoiceId}`,
+              trans_date: '2026-08-01',
+              due_date: null,
+              contact: { id: 44, name: 'Fixture', company: 'PT Maju Jaya' },
+              amount_after_tax: '100.00',
+              due: '0',
+              memo: null,
+              items: [],
+            },
+          }),
+        )
+        return
+      }
+      const payment = {
+        id: 801,
+        business_tran_id: invoiceId === '101' ? 999 : invoiceId,
+        trans_type_id: 17,
+        trans_date: '2026-08-10',
+        amount_after_tax: '100.00',
+        status_id: 3,
+        bank_account_id: 77,
+        payment_type_id: null,
+        bank_account: { id: invoiceId === '103' ? 78 : 77, name: 'Bank Maju' },
+      }
+      response.end(
+        JSON.stringify({
+          success: true,
+          data:
+            invoiceId === '102'
+              ? [payment, { ...payment, amount_after_tax: '101.00' }]
+              : [payment],
+        }),
+      )
+    })
+    await new Promise<void>((resolve) => upstream.listen(0, '127.0.0.1', resolve))
+    const { port } = upstream.address() as AddressInfo
+    closeables.push({
+      close: () =>
+        new Promise<void>((resolve, reject) =>
+          upstream.close((error) => (error ? reject(error) : resolve())),
+        ),
+    })
+
+    const gateway = createKledoHttpGateway({
+      baseUrl: new URL(`http://127.0.0.1:${port}/api/v1/`),
+      token: 'fixture-secret',
+      allowInsecureLoopback: true,
+    })
+    const client = new Client(
+      { name: 'kledo-mcp-contract-test', version: '0.1.0' },
+      { versionNegotiation: { mode: { pin: '2026-07-28' } } },
+    )
+    const [clientTransport, serverTransport] = InMemoryTransport.createLinkedPair()
+    const server = serveStdio(() => createKledoMcpServer({ gateway }), {
+      legacy: 'reject',
+      transport: serverTransport,
+    })
+    closeables.push(client, server)
+    await client.connect(clientTransport)
+
+    for (const id of ['101', '102', '103']) {
+      const result = await client.callTool({
+        name: 'kledo_get',
+        arguments: { entity: 'sales_invoice', id, include: ['invoice_payments'] },
+      })
+
+      expect(result, id).toMatchObject({
+        isError: true,
+        content: [
+          {
+            type: 'text',
+            text: JSON.stringify({
+              code: 'SCHEMA_MISMATCH',
+              message: 'Kledo returned inconsistent invoice payment data',
+              retryable: false,
+            }),
+          },
+        ],
+      })
+    }
   })
 
   it('rejects unsafe integer tokens and preserves exact large IDs and decimals', async () => {

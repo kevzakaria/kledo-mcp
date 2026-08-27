@@ -142,5 +142,27 @@ describe('Kledo MCP tool catalog', () => {
       expect.arrayContaining(['kind', 'id', 'party', 'paymentState', 'displayName', 'balance']),
     )
     expect(queryProperties?.fields?.items?.description).toMatch(/sales_invoice.*contact=.*displayName/is)
+
+    const getTool = tools.find(({ name }) => name === 'kledo_get')
+    expect(getTool?.inputSchema).toMatchObject({
+      properties: {
+        include: {
+          items: { enum: ['line_items', 'relation_ids', 'invoice_payments'] },
+          maxItems: 3,
+        },
+        invoicePaymentLimit: { default: 50, minimum: 1, maximum: 200 },
+      },
+    })
+    expect(getTool?.outputSchema).toMatchObject({
+      properties: {
+        invoicePayments: { type: 'array' },
+        truncation: {
+          properties: {
+            invoicePayments: { type: 'boolean' },
+            omittedInvoicePaymentCount: { minimum: 0, type: 'integer' },
+          },
+        },
+      },
+    })
   })
 })

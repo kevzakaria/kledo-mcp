@@ -24,12 +24,13 @@ import {
 import type {
   KledoGetInput,
   KledoGetOutput,
+  KledoInvoicePayment,
   KledoQueryInput,
   KledoQueryOutput,
   KledoReportInput,
   KledoReportOutput,
 } from '../tools/schemas.js'
-import { jsonValueSchema } from '../tools/schemas.js'
+import { invoicePaymentOutputSchema, jsonValueSchema } from '../tools/schemas.js'
 
 const rawContactSchema = z
   .object({
@@ -98,6 +99,35 @@ const rawSalesInvoiceDetailSchema = rawSalesInvoiceSchema.extend({
     .optional(),
 })
 
+const rawInvoicePaymentIdSchema = exactIdSchema.refine(
+  (value) => /^[1-9]\d{0,19}$/.test(String(value)),
+)
+
+const rawInvoiceTransactionDiscriminatorSchema = z
+  .object({ trans_type_id: rawInvoicePaymentIdSchema })
+  .passthrough()
+
+const rawInvoicePaymentSchema = z
+  .object({
+    id: rawInvoicePaymentIdSchema,
+    business_tran_id: rawInvoicePaymentIdSchema,
+    trans_type_id: rawInvoicePaymentIdSchema,
+    trans_date: z.string().date(),
+    amount_after_tax: decimalSchema,
+    status_id: rawInvoicePaymentIdSchema.nullable().optional(),
+    bank_account_id: rawInvoicePaymentIdSchema.nullable().optional(),
+    payment_type_id: rawInvoicePaymentIdSchema.nullable().optional(),
+    bank_account: z
+      .object({
+        id: rawInvoicePaymentIdSchema,
+        name: z.string().nullable().optional(),
+      })
+      .passthrough()
+      .nullable()
+      .optional(),
+  })
+  .passthrough()
+
 const rawEntityPageEnvelopeSchema = z.object({
   success: z.literal(true),
   data: z.object({
@@ -127,6 +157,11 @@ const rawEntityDetailEnvelopeSchema = z.object({
 const rawSalesInvoiceDetailEnvelopeSchema = z.object({
   success: z.literal(true),
   data: rawSalesInvoiceDetailSchema,
+})
+
+const rawInvoicePaymentsEnvelopeSchema = z.object({
+  success: z.literal(true),
+  data: z.array(z.unknown()),
 })
 
 const rawNativeReportEnvelopeSchema = z
@@ -254,6 +289,80 @@ function normalizedSalesInvoice(invoice: z.infer<typeof rawSalesInvoiceSchema>):
     paymentState: paymentState(total, remaining),
     sourceUpdatedAt: invoice.updated_at ?? null,
   }
+}
+
+function normalizedInvoicePayments(
+  invoiceId: string,
+  rawTransactions: unknown[],
+): KledoInvoicePayment[] {
+  const paymentsById = new Map<string, KledoInvoicePayment>()
+
+  for (const rawTransaction of rawTransactions) {
+    const discriminator = rawInvoiceTransactionDiscriminatorSchema.parse(rawTransaction)
+    if (String(discriminator.trans_type_id) !== '17') continue
+    const payment = rawInvoicePaymentSchema.parse(rawTransaction)
+    if (String(payment.business_tran_id) !== invoiceId) {
+      throw new KledoError(
+        'SCHEMA_MISMATCH',
+        'Kledo returned inconsistent invoice payment data',
+      )
+    }
+
+    const directBankAccountId =
+      payment.bank_account_id === null || payment.bank_account_id === undefined
+        ? null
+        : String(payment.bank_account_id)
+    const nestedBankAccountId = payment.bank_account ? String(payment.bank_account.id) : null
+    if (
+      directBankAccountId !== null &&
+      nestedBankAccountId !== null &&
+      directBankAccountId !== nestedBankAccountId
+    ) {
+      throw new KledoError(
+        'SCHEMA_MISMATCH',
+        'Kledo returned inconsistent invoice payment data',
+      )
+    }
+    const bankAccountId = directBankAccountId ?? nestedBankAccountId
+    const id = String(payment.id)
+    const normalized = invoicePaymentOutputSchema.parse({
+      id,
+      invoiceId,
+      transactionDate: payment.trans_date,
+      amount: normalizeMoney(payment.amount_after_tax, payment, payment.bank_account),
+      statusId:
+        payment.status_id === null || payment.status_id === undefined
+          ? null
+          : String(payment.status_id),
+      bankAccount:
+        bankAccountId === null
+          ? null
+          : {
+              id: bankAccountId,
+              name: payment.bank_account?.name?.trim() || null,
+            },
+      paymentTypeId:
+        payment.payment_type_id === null || payment.payment_type_id === undefined
+          ? null
+          : String(payment.payment_type_id),
+    })
+
+    const existing = paymentsById.get(id)
+    if (existing && JSON.stringify(existing) !== JSON.stringify(normalized)) {
+      throw new KledoError(
+        'SCHEMA_MISMATCH',
+        'Kledo returned inconsistent invoice payment data',
+      )
+    }
+    paymentsById.set(id, normalized)
+  }
+
+  return [...paymentsById.values()].sort((left, right) => {
+    const byDate = left.transactionDate.localeCompare(right.transactionDate)
+    if (byDate !== 0) return byDate
+    const byIdLength = left.id.length - right.id.length
+    return byIdLength !== 0 ? byIdLength : left.id.localeCompare(right.id)
+  })
 }
 
 function queryCursorRequest(input: KledoQueryInput): object {
@@ -743,6 +852,9 @@ export function createKledoHttpGateway(options: CreateKledoHttpGatewayOptions): 
 
       if (input.entity !== 'sales_invoice') {
         const includes = new Set(input.include ?? [])
+        if (includes.has('invoice_payments')) {
+          invalid(`${input.entity} does not support invoice_payments`)
+        }
         if (includes.size > 0 && !transactionIncludeEntities.has(input.entity)) {
           invalid(`${input.entity} does not support includes`)
         }
@@ -816,15 +928,30 @@ export function createKledoHttpGateway(options: CreateKledoHttpGatewayOptions): 
             },
           ]
         : []
+      let invoicePayments: KledoInvoicePayment[] = []
+      let omittedInvoicePaymentCount = 0
+      if (includes.has('invoice_payments')) {
+        const paymentsUrl = new URL(`finance/invoices/${input.id}/transactions`, baseUrl)
+        const paymentsBody = await requestJson(paymentsUrl, signal)
+        const paymentsEnvelope = rawInvoicePaymentsEnvelopeSchema.parse(paymentsBody)
+        const allInvoicePayments = normalizedInvoicePayments(input.id, paymentsEnvelope.data)
+        invoicePayments = allInvoicePayments.slice(0, input.invoicePaymentLimit)
+        omittedInvoicePaymentCount = allInvoicePayments.length - invoicePayments.length
+      }
 
       return {
         entity: input.entity,
         record: projectFields(input.entity, input.fields, normalizedSalesInvoice(invoice)),
         ...(includes.has('line_items') ? { lineItems } : {}),
         ...(includes.has('relation_ids') ? { relations } : {}),
+        ...(includes.has('invoice_payments') ? { invoicePayments } : {}),
         truncation: {
           lineItems: includes.has('line_items') && omittedCount > 0,
           ...(includes.has('line_items') && omittedCount > 0 ? { omittedCount } : {}),
+          ...(includes.has('invoice_payments')
+            ? { invoicePayments: omittedInvoicePaymentCount > 0 }
+            : {}),
+          ...(omittedInvoicePaymentCount > 0 ? { omittedInvoicePaymentCount } : {}),
         },
         meta: {
           fetchedAt: now().toISOString(),

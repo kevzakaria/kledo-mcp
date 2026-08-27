@@ -128,6 +128,18 @@ describe('kledo_get transaction includes', () => {
       relations: [{ relation: 'derived_from', entity: 'sales_order', id: '99' }],
       truncation: { lineItems: false },
     })
+
+    const requestCountBeforeInvalidInclude = requestedUrls.length
+    const invalidInvoicePayments = await client.callTool({
+      name: 'kledo_get',
+      arguments: {
+        entity: 'purchase_order',
+        id: '101',
+        include: ['invoice_payments'],
+      },
+    })
+    expect(invalidInvoicePayments).toMatchObject({ isError: true })
+    expect(requestedUrls).toHaveLength(requestCountBeforeInvalidInclude)
     expect(requestedUrls).toEqual([
       '/api/v1/finance/purchaseOrders/101',
       '/api/v1/finance/deliveries/101',

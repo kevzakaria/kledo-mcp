@@ -222,8 +222,12 @@ export const kledoGetInputSchema = z
     id: z
       .string()
       .regex(/^[1-9]\d{0,19}$/, 'id must be a positive decimal Kledo ID of at most 20 digits'),
-    include: z.array(z.enum(['line_items', 'relation_ids'])).max(2).optional(),
+    include: z
+      .array(z.enum(['line_items', 'relation_ids', 'invoice_payments']))
+      .max(3)
+      .optional(),
     lineItemLimit: z.number().int().min(1).max(200).default(50),
+    invoicePaymentLimit: z.number().int().min(1).max(200).default(50),
     fields: z.array(z.string().trim().min(1).max(80)).max(40).optional(),
   })
   .strict()
@@ -379,11 +383,49 @@ export const kledoQueryOutputSchema = z
   })
   .strict()
 
+const normalizedMoneyOutputSchema = z
+  .object({
+    amount: z.string().regex(/^-?\d+(?:\.\d+)?$/),
+    currency: z.string().nullable(),
+    currencyId: z.string().regex(/^[1-9]\d{0,19}$/).optional(),
+    currencyName: z.string().optional(),
+  })
+  .strict()
+
+export const invoicePaymentOutputSchema = z
+  .object({
+    id: z.string().regex(/^[1-9]\d{0,19}$/),
+    invoiceId: z.string().regex(/^[1-9]\d{0,19}$/),
+    transactionDate: z
+      .string()
+      .date()
+      .describe(
+        'Date of this direct Kledo type-17 Invoice Payment event; not the invoice final settlement or paid date.',
+      ),
+    amount: normalizedMoneyOutputSchema,
+    statusId: z.string().regex(/^[1-9]\d{0,19}$/).nullable(),
+    bankAccount: z
+      .object({
+        id: z.string().regex(/^[1-9]\d{0,19}$/),
+        name: z.string().nullable(),
+      })
+      .strict()
+      .nullable(),
+    paymentTypeId: z.string().regex(/^[1-9]\d{0,19}$/).nullable(),
+  })
+  .strict()
+
 export const kledoGetOutputSchema = z
   .object({
     entity: kledoDetailEntitySchema,
     record: z.record(z.string(), jsonValueSchema),
     lineItems: z.array(z.record(z.string(), jsonValueSchema)).optional(),
+    invoicePayments: z
+      .array(invoicePaymentOutputSchema)
+      .describe(
+        'Direct child Invoice Payment transactions only (Kledo type 17); other child transaction types are excluded.',
+      )
+      .optional(),
     relations: z
       .array(
         z
@@ -399,6 +441,8 @@ export const kledoGetOutputSchema = z
       .object({
         lineItems: z.boolean(),
         omittedCount: z.number().int().nonnegative().optional(),
+        invoicePayments: z.boolean().optional(),
+        omittedInvoicePaymentCount: z.number().int().nonnegative().optional(),
       })
       .strict(),
     meta: resultMetaSchema.omit({ complete: true }),
@@ -422,3 +466,4 @@ export type KledoReportInput = z.infer<typeof kledoReportInputSchema>
 export type KledoQueryOutput = z.infer<typeof kledoQueryOutputSchema>
 export type KledoGetOutput = z.infer<typeof kledoGetOutputSchema>
 export type KledoReportOutput = z.infer<typeof kledoReportOutputSchema>
+export type KledoInvoicePayment = z.infer<typeof invoicePaymentOutputSchema>
