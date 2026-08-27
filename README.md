@@ -1,58 +1,41 @@
 <p align="center">
-  <img src="docs/assets/kledo-mcp-banner.png" alt="A user connects AI clients through an MCP server to Kledo" width="100%">
+  <img src="docs/assets/kledo-mcp-banner.png" alt="Pengguna menghubungkan klien AI ke Kledo melalui server MCP" width="100%">
 </p>
 
 <p align="center">
-  <strong>English</strong> | <a href="README.id.md">Bahasa Indonesia</a>
+  <strong>Bahasa Indonesia</strong> | <a href="README.en.md">English</a>
 </p>
 
 # Kledo MCP
 
 > [!IMPORTANT]
-> **This is not an official Kledo MCP server.** I maintain this independent
-> open-source project as a Kledo user. It is not affiliated with, sponsored by,
-> endorsed by, or supported by Kledo.
+> **Ini bukan server MCP resmi dari Kledo.** Project open-source ini dibuat
+> secara independen oleh pengguna Kledo, tanpa afiliasi, sponsor, dukungan,
+> atau endorsement dari Kledo.
 >
-> I built it because I needed a narrow, read-only bridge between Kledo and
-> MCP-capable AI agents or harnesses such as ChatGPT, Claude, Hermes, Codex,
-> Cursor, and other compatible clients.
+> Repo ini berawal dari kebutuhan sehari-hari: supaya data Kledo bisa ditanya
+> lewat ChatGPT, Claude, Hermes, Codex, Cursor, atau klien MCP lainnya tanpa
+> membuka akses tulis yang tidak perlu.
 >
-> I maintain the repository with substantial help from AI coding agents. Human
-> maintainers remain responsible for scope, security, review, and releases.
+> Banyak bagian repo dikerjakan bareng AI coding agent. Maintainer manusia tetap
+> pegang keputusan soal scope, keamanan, review, dan release.
 
-Kledo MCP is a minimal, read-only
-[Model Context Protocol](https://modelcontextprotocol.io/) server for querying
-one caller-configured Kledo tenant. I expose exactly three bounded tools over
-stdio and keep raw endpoints, credentials, and pagination mechanics out of the
-AI model's interface.
+Kledo MCP adalah jembatan
+[Model Context Protocol](https://modelcontextprotocol.io/) yang minimal dan
+read-only untuk membaca satu tenant Kledo yang dikonfigurasi oleh pengguna.
+Saat ini sengaja cuma ada tiga tool. Endpoint mentah, credential, dan detail
+pagination tidak pernah diberikan langsung ke model AI.
 
-**Status:** `0.1.x` preview. I am intentionally keeping the interface small
-while response shapes and report behavior are verified.
-
-## Current MCP architecture
-
-> [!NOTE]
-> I develop and test this server against the current MCP protocol revision,
-> [`2026-07-28`](https://modelcontextprotocol.io/specification/2026-07-28),
-> using the MCP 2.x server architecture. The official versioning guide marked
-> this as the current revision when I last checked on 2026-08-27.
->
-> Older MCP guides for `2025-11-25` and earlier use a handshake-based protocol
-> architecture, so their initialization flow and server examples do not map
-> directly to this repository. I retain tested compatibility with
-> `2025-06-18` for clients that still negotiate it, but new development follows
-> `2026-07-28`.
-
-See the official [MCP versioning guide](https://modelcontextprotocol.io/docs/2026-07-28/learn/versioning)
-and this project's [architecture guide](docs/architecture.md) for details.
+**Status:** masih preview `0.1.x`. Kontrak tool dijaga kecil sambil bentuk
+response dan perilaku report terus dicek.
 
 ## Quick setup
 
-Requirements:
+Yang dibutuhkan:
 
-- Node.js 22.19 or later
+- Node.js 22.19 atau lebih baru
 - npm
-- access to a Kledo tenant's Open API page
+- akses ke halaman Open API di tenant Kledo
 
 ```bash
 git clone https://github.com/kevzakaria/kledo-mcp.git
@@ -61,82 +44,96 @@ npm ci
 npm run setup
 ```
 
-The setup wizard builds the server, guides you to **Settings > Integration >
-Open API**, accepts the token through hidden terminal input, writes a
-gitignored `.env` with owner-only permissions, and validates the local
-configuration without making a Kledo API request.
+Wizard akan membangun server, menunjukkan lokasi token di **Pengaturan >
+Integrasi > Open API**, menerima token lewat input terminal tersembunyi, lalu
+menulis `.env` yang sudah diabaikan Git dan hanya bisa dibaca oleh pemilik file.
+Validasi awal dilakukan secara lokal tanpa memanggil API Kledo.
 
-Then add the generated command to your MCP client. Copy-ready examples are
-available for [Hermes, Codex, Claude Desktop, and Cursor](docs/client-setup.md).
+Setelah wizard selesai, masukkan command yang dihasilkan ke klien MCP. Contoh
+siap salin untuk Hermes, Codex, Claude Desktop, dan Cursor ada di
+[panduan setup klien](docs/client-setup.md).
 
-### Install with your AI agent
+### Minta AI agent yang memasangnya
 
-Copy this prompt into the coding agent or local AI harness you trust:
+Kalau lebih nyaman dibantu coding agent, salin prompt ini ke agent atau AI
+harness lokal pilihanmu:
 
 ```text
-Install and configure kledo-mcp from https://github.com/kevzakaria/kledo-mcp.
+Pasang dan konfigurasikan kledo-mcp dari https://github.com/kevzakaria/kledo-mcp.
 
-1. Clone the repository and verify that Node.js 22.19 or later and npm are available.
-2. Run npm ci.
-3. Run npm run setup. Pause for me when the wizard needs the Kledo API URL or token so I can enter them directly through the hidden terminal input.
-4. Never ask me to paste a token into chat, source code, command history, logs, or a committed file.
-5. Read docs/client-setup.md and configure my chosen MCP client using environment variables or my preferred secret manager.
-6. Run npm run config:check and npm test, then verify that the server advertises exactly kledo_query, kledo_get, and kledo_report.
-7. Do not add tools, call Kledo write endpoints, change the read-only scope, expose secrets, or commit .env.
-8. Tell me what you changed, which checks passed, and the exact command my MCP client will run.
+1. Clone repository dan pastikan Node.js 22.19 atau lebih baru serta npm tersedia.
+2. Jalankan npm ci.
+3. Jalankan npm run setup. Pause saat wizard meminta URL atau token Kledo supaya saya bisa mengisinya sendiri lewat input terminal tersembunyi.
+4. Jangan pernah meminta token lewat chat, source code, command history, log, atau file yang akan di-commit.
+5. Baca docs/client-setup.md lalu konfigurasikan klien MCP pilihan saya dengan environment variable atau secret manager yang saya pilih.
+6. Jalankan npm run config:check dan npm test. Pastikan server hanya menyediakan kledo_query, kledo_get, dan kledo_report.
+7. Jangan menambah tool, memanggil endpoint write Kledo, mengubah scope read-only, membuka secret, atau meng-commit .env.
+8. Laporkan perubahan yang dibuat, hasil pengecekan, dan command persis yang akan dijalankan klien MCP saya.
 ```
 
-Prefer another secret manager or a manually managed environment? Read
-[configuration and secret handling](docs/configuration.md). The server only
-reads `KLEDO_API_BASE_URL` and `KLEDO_API_TOKEN` from its process environment.
+Pakai secret manager lain atau ingin mengatur environment sendiri? Baca
+[panduan konfigurasi dan secret](docs/configuration.md). Server hanya membaca
+`KLEDO_API_BASE_URL` dan `KLEDO_API_TOKEN` dari environment proses.
 
-## Three read-only tools
+## Tiga tool read-only
 
-| Tool | Purpose |
+| Tool | Fungsinya |
 | --- | --- |
-| `kledo_query` | Search or page through an allowlisted Kledo entity |
-| `kledo_get` | Retrieve one normalized record and bounded relationships |
-| `kledo_report` | Run an allowlisted native Kledo report |
+| `kledo_query` | Mencari atau membaca halaman entity Kledo yang ada di allowlist |
+| `kledo_get` | Mengambil satu record yang sudah dinormalisasi beserta relasi terbatas |
+| `kledo_report` | Menjalankan report native Kledo yang ada di allowlist |
 
-I do not expose tools that create or modify records, switch tenants during a
-call, send messages, export files, or issue arbitrary HTTP requests. Read the
-[tool reference](docs/tool-reference.md) for supported entities, reports,
-examples, and current implementation status.
+Tidak ada tool untuk membuat atau mengubah record, mengganti tenant saat tool
+dipanggil, mengirim pesan, mengekspor file, atau menjalankan HTTP request bebas.
+Daftar entity, report, contoh pertanyaan, dan status implementasi ada di
+[referensi tool](docs/tool-reference.md).
 
-## Documentation
+## Versi MCP yang dipakai
 
-| Guide | Contents |
+Repo ini mengikuti revisi protokol MCP current,
+[`2026-07-28`](https://modelcontextprotocol.io/specification/2026-07-28), dan
+arsitektur server MCP 2.x. Tutorial untuk `2025-11-25` atau versi lebih lama
+masih memakai handshake, jadi alur inisialisasinya memang berbeda.
+Kompatibilitas `2025-06-18` tetap dites untuk klien lama.
+
+Detailnya bisa dibaca di
+[panduan versioning resmi MCP](https://modelcontextprotocol.io/docs/2026-07-28/learn/versioning)
+dan [dokumen arsitektur repo](docs/architecture.md).
+
+## Dokumentasi
+
+| Panduan | Isi |
 | --- | --- |
-| [Configuration](docs/configuration.md) | Wizard, manual setup, secret handling, and multiple tenants |
-| [Client setup](docs/client-setup.md) | Hermes, Codex, Claude Desktop, Cursor, and MCP Inspector |
-| [Tool reference](docs/tool-reference.md) | Tool contracts, entity catalog, reports, and example questions |
-| [Architecture](docs/architecture.md) | Data flow, protocol target, boundaries, transport behavior, and safe failures |
-| [Security policy](SECURITY.md) | Vulnerability reporting and credential safety |
+| [Konfigurasi](docs/configuration.md) | Wizard, setup manual, secret manager, dan beberapa tenant |
+| [Setup klien](docs/client-setup.md) | Hermes, Codex, Claude Desktop, Cursor, dan MCP Inspector |
+| [Referensi tool](docs/tool-reference.md) | Kontrak tool, katalog entity, report, dan contoh pertanyaan |
+| [Arsitektur](docs/architecture.md) | Alur data, versi protokol, batasan, transport, dan safe failure |
+| [Kebijakan keamanan](SECURITY.md) | Cara melaporkan celah keamanan dan menjaga credential |
 
-## Issues and contributions
+## Issue dan kontribusi
 
-I welcome bug reports and feature proposals through the
+Menemukan bug atau punya ide? Mulai dari
 [GitHub issue chooser](https://github.com/kevzakaria/kledo-mcp/issues/new/choose).
-Blank issues are disabled so reports remain actionable.
+Blank issue sengaja dimatikan supaya setiap laporan punya konteks yang cukup
+untuk ditindaklanjuti.
 
-Issues created by AI agents are welcome. They must identify the agent or
-harness, name a human reviewer when available, distinguish verified facts from
-proposals, include sanitized evidence, and define testable acceptance criteria.
-Never include tokens, tenant URLs, customer records, real invoice numbers, raw
-production responses, local paths, or private integration identifiers.
+Issue yang dibuat AI agent juga boleh. Cantumkan agent atau harness yang
+dipakai, reviewer manusia jika ada, pisahkan fakta yang sudah diverifikasi dari
+usulan, sertakan bukti yang sudah dibersihkan, dan tulis acceptance criteria
+yang bisa dites. Jangan masukkan token, URL tenant, data pelanggan, nomor
+invoice asli, response production mentah, local path, atau identifier privat.
 
-Feature requests should begin with a user or company question that cannot be
-answered safely today. Please do not request a new tool merely because another
-Kledo endpoint exists. Read [CONTRIBUTING.md](CONTRIBUTING.md) before
-implementing a change, and report vulnerabilities privately through
-[SECURITY.md](SECURITY.md).
+Untuk feature request, mulai dari pertanyaan bisnis yang belum bisa dijawab
+dengan aman. Jangan mengusulkan tool baru hanya karena endpoint Kledo tersedia.
+Baca [CONTRIBUTING.md](CONTRIBUTING.md) sebelum mulai membuat perubahan. Celah
+keamanan harus dilaporkan secara privat lewat [SECURITY.md](SECURITY.md).
 
-## License and trademarks
+## Lisensi dan merek dagang
 
-Copyright 2026 Kledo MCP contributors. Licensed under the
+Copyright 2026 Kledo MCP contributors. Dilisensikan dengan
 [Apache License 2.0](LICENSE).
 
-Kledo and the displayed AI client names and logos are trademarks of their
-respective owners. I use them only to identify interoperability or potential
-client compatibility. Their appearance does not imply affiliation,
-certification, sponsorship, or endorsement.
+Kledo serta nama dan logo klien AI yang tampil di repo ini adalah merek dagang
+pemilik masing-masing. Semuanya dipakai hanya untuk menunjukkan
+interoperabilitas atau kemungkinan kompatibilitas, bukan afiliasi, sertifikasi,
+sponsorship, atau endorsement.
