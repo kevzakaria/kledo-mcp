@@ -115,7 +115,7 @@ bytes are included in the final frame budget calculation.
 - `receivable_by_invoice` pages Kledo's authoritative Aged Receivable customer
   summary, then completely consumes the invoice drill-down for each customer on
   that page. Customer totals are checked across both sources, `memo` is exposed
-  as the Web UI project/reference concept, and a remaining customer cursor keeps
+  as the normalized `projectReference`, and a remaining customer cursor keeps
   the result explicitly incomplete.
 - `item_price_analysis` resolves exactly one active product before fetching
   product detail, latest sell and buy prices, Purchase Invoice product rows, and

@@ -120,14 +120,13 @@ adapter validates customer identity and customer totals across both sources.
 `asOf` is required. `pageSize` controls customers, defaults to 10, and is capped
 at 20 because every customer has a bounded detail fan-out. Follow
 `pageInfo.nextCursor` before presenting a company-wide list. Filters such as
-warehouse or salesperson are intentionally unsupported: Kledo's verified Web
-UI detail route does not preserve them from the customer summary screen.
+warehouse or salesperson are intentionally unsupported because the upstream
+summary-to-detail report contract does not preserve them.
 
 Each invoice returns `invoiceNumber`, dates, invoice amount, outstanding amount,
-and `projectReference`. The latter is the upstream API `memo`; Kledo displays
-that same value as **Reference** in the Aged Receivable Detail Web UI. Source
-families and this field mapping are explicit in `provenance`. Contact email,
-phone, address, tax ID, and raw contact payloads are never returned.
+and `projectReference`. The latter is sourced from the upstream API `memo`.
+Source families and this field mapping are explicit in `provenance`. Contact
+email, phone, address, tax ID, and raw contact payloads are never returned.
 
 Use `item_price_analysis` for one product's pricing and gross-margin facts. It
 requires an explicit `period` plus exactly one of `productCode` or

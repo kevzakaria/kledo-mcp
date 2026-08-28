@@ -379,9 +379,16 @@ describe('visual MCP Inspector workflow', () => {
       provenance: {
         customerTotals: '/reportings/agedReceivable',
         invoiceBreakdown: '/reportings/agedReceivableDetail/:contactId',
-        projectReference: { apiField: 'memo', webUiField: 'Reference' },
+        projectReference: { apiField: 'memo' },
       },
     })
+    expect(
+      (
+        response.result.structuredContent as {
+          provenance: { projectReference: unknown }
+        }
+      ).provenance.projectReference,
+    ).toEqual({ apiField: 'memo' })
     expect(result.stderr).toContain('report.receivable_by_invoice.customer_totals.request')
     expect(result.stderr).toContain('report.receivable_by_invoice.invoice_breakdown.request')
     expect(result.stderr).not.toContain('synthetic-inspector-token')
