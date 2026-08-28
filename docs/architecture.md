@@ -17,63 +17,139 @@ flowchart LR
     C --> U
 ```
 
-## Everyday-language query routing
+## Everyday-language query responsibility swimlane
 
-The user supplies business language and visible document numbers. The
-MCP-capable agent chooses one of the three public tools; Kledo's numeric IDs
-stay inside the tool workflow unless they were already returned by an earlier
-MCP result.
+The swimlane separates responsibility across the user, any MCP-capable agent,
+the local Kledo MCP process, its optional identity cache, and the Kledo API.
+The agent selects one of three public tools while the MCP owns validation,
+identity and locator resolution, upstream safety, and normalization.
 
 ```mermaid
-flowchart TD
-    U["User asks in everyday language"] --> A["MCP-capable agent identifies intent and known locator"]
-    A --> R{"What shape of answer is needed?"}
+flowchart LR
+    subgraph USER["User"]
+        direction TB
+        UQ["Ask in everyday language"]
+        UA["Receive explained answer"]
+    end
 
-    R -->|Search or list records| Q["kledo_query"]
-    R -->|One record or exact commercial document| G["kledo_get"]
-    R -->|Aggregate, KPI, or analysis| P["kledo_report"]
+    subgraph AGENT["MCP-capable agent"]
+        direction TB
+        AI["Identify intent and known locator"]
+        CHOOSE{"Choose public tool"}
+        EXPLAIN["Explain result or safe error"]
+    end
 
-    Q --> QAPI["Allowlisted Kledo list endpoint"]
+    subgraph MCP["kledo-mcp"]
+        direction TB
+        QUERY["Validate kledo_query"]
+        GET["Validate kledo_get"]
+        REPORT["Validate kledo_report"]
+        GETLOC{"Record locator"}
+        DOCMATCH{"Exact document match"}
+        REPSEL{"Report selector"}
+        PRODMATCH{"Exact product match"}
+        NORMALIZE["Validate upstream response, normalize, and bound"]
+        ERROR["Sanitized MCP error"]
+    end
 
-    G --> GV["Validate entity, exactly one locator, and includes"]
-    GV --> GL{"Which locator did the agent supply?"}
-    GL -->|Numeric ID from an earlier MCP result| GD["Fetch detail and optional expansions"]
-    GL -->|Exact human-visible Document Number| GS["Bounded live search in the selected Kledo document endpoint"]
-    GS --> GM{"Exact Document Number matches"}
-    GM -->|Zero| NF["Safe NOT_FOUND error"]
-    GM -->|Multiple| AM["Safe AMBIGUOUS error"]
-    GM -->|One| HID["Keep numeric Kledo ID internal"]
-    HID --> GD
+    subgraph CACHE["Optional local identity cache"]
+        direction TB
+        MEMORY["In-memory salesperson identities"]
+        SQLITE[("SQLite sanitized identities")]
+        REFRESH["Refresh sanitized identity"]
+    end
 
-    P --> PS{"Which selector does the report need?"}
-    PS -->|No selector or direct ID| PAPI["Allowlisted Kledo report endpoint"]
-    PS -->|Product code or name| PROD["Bounded live Kledo product search"]
-    PROD --> PM{"One safe product match?"}
-    PM -->|One| PAPI
-    PM -->|Zero| NF
-    PM -->|Multiple| AM
-    PS -->|Exact salesperson name| MEM["Check in-memory identity cache"]
-    MEM --> SQL{"SQLite enabled and exact identity cached?"}
-    SQL -->|Exact hit| PAPI
-    SQL -->|Miss or disabled| USERS["Refresh from bounded Kledo users catalog"]
-    USERS --> CACHE["Update memory and optional SQLite"]
-    CACHE --> PAPI
+    subgraph KLEDO["Kledo API"]
+        direction TB
+        QUERYAPI["Entity list and search endpoints"]
+        DOCSEARCH["Commercial document search"]
+        DETAIL["Record detail and bounded expansions"]
+        PRODUCT["Product catalog endpoints"]
+        USERS["Users catalog"]
+        REPORTAPI["Native report endpoints"]
+    end
 
-    QAPI --> N["Validate upstream schema, normalize, and bound result"]
-    GD --> N
-    PAPI --> N
-    N --> O["Structured MCP result with provenance and freshness"]
-    O --> ANSWER["Agent explains the result in everyday language"]
-    ANSWER --> U
+    UQ --> AI --> CHOOSE
+    CHOOSE -->|Search or list| QUERY
+    CHOOSE -->|One record or document| GET
+    CHOOSE -->|KPI or analysis| REPORT
 
-    NF --> ANSWER
-    AM --> ANSWER
+    QUERY --> QUERYAPI --> NORMALIZE
+
+    GET --> GETLOC
+    GETLOC -->|Numeric ID from earlier MCP result| DETAIL
+    GETLOC -->|Visible Document Number| DOCSEARCH
+    DOCSEARCH --> DOCMATCH
+    DOCMATCH -->|One| DETAIL
+    DOCMATCH -->|Zero or multiple| ERROR
+
+    REPORT --> REPSEL
+    REPSEL -->|No selector or direct ID| REPORTAPI
+    REPSEL -->|Product code or name| PRODUCT
+    PRODUCT --> PRODMATCH
+    PRODMATCH -->|One| REPORTAPI
+    PRODMATCH -->|Zero or multiple| ERROR
+    REPSEL -->|Salesperson name| MEMORY
+    MEMORY -->|Exact memory hit| REPORTAPI
+    MEMORY -->|Miss and SQLite enabled| SQLITE
+    MEMORY -->|Miss and memory-only| USERS
+    SQLITE -->|Exact hit| REPORTAPI
+    SQLITE -->|Miss| USERS
+    USERS --> REFRESH
+    REFRESH --> MEMORY
+    REFRESH -.->|When enabled| SQLITE
+    REFRESH --> REPORTAPI
+
+    DETAIL --> NORMALIZE
+    REPORTAPI --> NORMALIZE
+    NORMALIZE --> EXPLAIN
+    ERROR --> EXPLAIN
+    EXPLAIN --> UA
 ```
 
 The `kledo_get` document path always resolves the Document Number live. It does
-not read or write the optional SQLite identity catalog. SQLite appears only on
-the report selector path shown above, where the current runtime use is exact
+not read or write the optional SQLite identity catalog. SQLite appears only in
+the report lane shown above, where the current runtime use is exact
 salesperson-name resolution.
+
+## Document Number lookup sequence
+
+The sequence below follows one concrete user question. It shows that the
+human-visible number is resolved first, while Kledo's numeric ID remains an
+internal hand-off between the search, detail, and payment requests.
+
+```mermaid
+sequenceDiagram
+    autonumber
+    actor U as User
+    participant A as MCP-capable agent
+    participant M as kledo-mcp
+    participant K as Kledo API
+
+    U->>A: Is INV/FIXTURE/462 paid and when was it updated?
+    A->>M: kledo_get(sales_invoice, documentNumber, payment_events)
+    M->>M: Validate locator and requested expansion
+    Note over M: Document lookup never uses SQLite
+    M->>K: Search invoices by visible Document Number
+    K-->>M: Candidate invoices
+    M->>M: Require exactly one case-insensitive match
+
+    alt Exactly one match
+        M->>K: Fetch invoice detail using hidden numeric ID
+        K-->>M: Invoice detail
+        M->>K: Fetch payment transactions using the same ID
+        K-->>M: Payment events
+        M->>M: Validate, normalize, and bound
+        M-->>A: paymentState, sourceUpdatedAt, and paymentEvents
+        A-->>U: Explain status and last source update
+    else No exact match
+        M-->>A: NOT_FOUND
+        A-->>U: Explain that the document was not found
+    else Multiple exact matches
+        M-->>A: AMBIGUOUS
+        A-->>U: Explain that no safe selection was possible
+    end
+```
 
 ## MCP tool-call state machine
 
