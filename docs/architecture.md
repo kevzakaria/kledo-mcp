@@ -17,6 +17,64 @@ flowchart LR
     C --> U
 ```
 
+## Everyday-language query routing
+
+The user supplies business language and visible document numbers. The
+MCP-capable agent chooses one of the three public tools; Kledo's numeric IDs
+stay inside the tool workflow unless they were already returned by an earlier
+MCP result.
+
+```mermaid
+flowchart TD
+    U["User asks in everyday language"] --> A["MCP-capable agent identifies intent and known locator"]
+    A --> R{"What shape of answer is needed?"}
+
+    R -->|Search or list records| Q["kledo_query"]
+    R -->|One record or exact commercial document| G["kledo_get"]
+    R -->|Aggregate, KPI, or analysis| P["kledo_report"]
+
+    Q --> QAPI["Allowlisted Kledo list endpoint"]
+
+    G --> GV["Validate entity, exactly one locator, and includes"]
+    GV --> GL{"Which locator did the agent supply?"}
+    GL -->|Numeric ID from an earlier MCP result| GD["Fetch detail and optional expansions"]
+    GL -->|Exact human-visible Document Number| GS["Bounded live search in the selected Kledo document endpoint"]
+    GS --> GM{"Exact Document Number matches"}
+    GM -->|Zero| NF["Safe NOT_FOUND error"]
+    GM -->|Multiple| AM["Safe AMBIGUOUS error"]
+    GM -->|One| HID["Keep numeric Kledo ID internal"]
+    HID --> GD
+
+    P --> PS{"Which selector does the report need?"}
+    PS -->|No selector or direct ID| PAPI["Allowlisted Kledo report endpoint"]
+    PS -->|Product code or name| PROD["Bounded live Kledo product search"]
+    PROD --> PM{"One safe product match?"}
+    PM -->|One| PAPI
+    PM -->|Zero| NF
+    PM -->|Multiple| AM
+    PS -->|Exact salesperson name| MEM["Check in-memory identity cache"]
+    MEM --> SQL{"SQLite enabled and exact identity cached?"}
+    SQL -->|Exact hit| PAPI
+    SQL -->|Miss or disabled| USERS["Refresh from bounded Kledo users catalog"]
+    USERS --> CACHE["Update memory and optional SQLite"]
+    CACHE --> PAPI
+
+    QAPI --> N["Validate upstream schema, normalize, and bound result"]
+    GD --> N
+    PAPI --> N
+    N --> O["Structured MCP result with provenance and freshness"]
+    O --> ANSWER["Agent explains the result in everyday language"]
+    ANSWER --> U
+
+    NF --> ANSWER
+    AM --> ANSWER
+```
+
+The `kledo_get` document path always resolves the Document Number live. It does
+not read or write the optional SQLite identity catalog. SQLite appears only on
+the report selector path shown above, where the current runtime use is exact
+salesperson-name resolution.
+
 ## MCP tool-call state machine
 
 Every MCP-capable client enters the same runtime state machine. Credential
