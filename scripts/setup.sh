@@ -292,8 +292,9 @@ ENV_FILE_ABSOLUTE=$(node -e 'console.log(require("node:path").resolve(process.ar
 SERVER_ABSOLUTE="$REPO_ROOT/dist/bin/stdio.js"
 WARMUP_ABSOLUTE="$REPO_ROOT/dist/bin/warmup-identities.js"
 printf '\n'
-say "Optional: prefetch the sanitized tenant reference catalogs now:"
-note "node --disable-warning=ExperimentalWarning --env-file=$ENV_FILE_ABSOLUTE $WARMUP_ABSOLUTE"
+say "Optional persistent identity storage is disabled by default."
+step "Set KLEDO_IDENTITY_CACHE=sqlite in $ENV_FILE_ABSOLUTE to opt in."
+note "Then run: node --disable-warning=ExperimentalWarning --env-file=$ENV_FILE_ABSOLUTE $WARMUP_ABSOLUTE"
 printf '\n'
 say "Use this command in an MCP client that accepts a command and arguments:"
 note "node --env-file=$ENV_FILE_ABSOLUTE $SERVER_ABSOLUTE"
