@@ -2,6 +2,22 @@
 
 Describe the user problem and the smallest change that solves it.
 
+## Release note
+
+<!--
+Write one public, user-facing sentence at or below 500 characters.
+For skip-changelog, write "Not applicable:" followed by the reason.
+-->
+
+## Version impact
+
+<!-- Select exactly one. The release maintainer decides the final combined version. -->
+
+- [ ] major
+- [ ] minor
+- [ ] patch
+- [ ] none
+
 ## Provenance
 
 - AI assistance used: yes | no

@@ -184,6 +184,7 @@ dan [dokumen arsitektur repo](docs/architecture.md).
 
 | Panduan | Isi |
 | --- | --- |
+| [Changelog](CHANGELOG.md) | Perubahan user-facing, kompatibilitas, dan catatan migrasi per versi |
 | [Konfigurasi](docs/configuration.md) | Wizard, setup manual, secret manager, dan beberapa tenant |
 | [Setup klien](docs/client-setup.md) | Hermes, Codex, Claude Desktop, Cursor, dan MCP Inspector |
 | [Referensi tool](docs/tool-reference.md) | Kontrak tool, katalog entity, report, dan contoh pertanyaan |

@@ -183,6 +183,7 @@ locator stays internal.
 
 | Guide | Contents |
 | --- | --- |
+| [Changelog](CHANGELOG.md) | User-facing changes, compatibility, and migration notes by version |
 | [Configuration](docs/configuration.md) | Wizard, manual setup, secret handling, and multiple tenants |
 | [Client setup](docs/client-setup.md) | Hermes, Codex, Claude Desktop, Cursor, and MCP Inspector |
 | [Tool reference](docs/tool-reference.md) | Tool contracts, entity catalog, reports, and example questions |

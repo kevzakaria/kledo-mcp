@@ -23,4 +23,5 @@ changelog:
         - dependencies
     - title: Maintenance
       labels:
+        - maintenance
         - "*"
