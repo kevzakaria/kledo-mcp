@@ -148,6 +148,18 @@ the pull-request author to generate categorized release notes and contributor
 credit. Maintainers follow the guarded process in
 [`docs/releasing.md`](docs/releasing.md).
 
+Every pull request must select exactly one release-note category:
+`security`, `enhancement`, `bug`, `documentation`, `dependencies`,
+`maintenance`, or `skip-changelog`. Fill in the pull-request template's
+`Release note` section with one public sentence at or below 500 characters and
+select exactly one version impact. For `skip-changelog`, write `Not applicable:`
+followed by the reason and select `none`.
+
+Normal pull requests do not edit `CHANGELOG.md`. The release pull request
+collects the merged pull-request metadata, curates user-facing highlights, and
+moves them from `Unreleased` into a dated version section. This keeps parallel
+changes from competing for the same release-owned file.
+
 ## Security reports
 
 Do not disclose vulnerabilities in a public pull request. Follow

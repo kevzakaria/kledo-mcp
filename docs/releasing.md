@@ -1,13 +1,15 @@
 # Release process
 
-This document is for maintainers. Kledo MCP uses pull-request metadata for
-release notes, staged npm publishing for human approval, and GitHub Releases as
-the public version history.
+This document is for maintainers. Kledo MCP uses pull-request metadata to
+collect release candidates, a curated root changelog for user-facing history,
+staged npm publishing for human approval, and GitHub Releases for the complete
+pull-request and contributor record.
 
 ## Release model
 
 ```text
 release pull request
+        |-----------------------> curated CHANGELOG.md section
         |
         v
 merge to protected main
@@ -32,8 +34,13 @@ Release workflow: publish
 public npm package
 ```
 
-GitHub automatically generates the change categories, merged pull requests,
-contributor mentions, first-time contributors, and full changelog link. The
+The release pull request owns `CHANGELOG.md`. It turns the collected public
+release notes into concise highlights, compatibility information, and any
+migration instructions. Normal feature, fix, documentation, and maintenance
+pull requests must not edit that file.
+
+GitHub automatically appends the complete change categories, merged pull
+requests, contributor mentions, first-time contributors, and compare link. The
 categories and exclusions live in `.github/release.yml`. A contributor receives
 credit through the GitHub account that owns the merged pull request. AI
 assistance is recorded separately in the pull request template and never
@@ -43,6 +50,8 @@ replaces human attribution.
 
 - The release commit must be merged into protected `main` through a pull
   request.
+- `CHANGELOG.md` must contain one `Unreleased` section and a dated section for
+  the package version being released.
 - `package.json`, `package-lock.json`, and `server.json` must contain the same
   version.
 - Prerelease versions use an npm `next` dist-tag. Stable versions use `latest`.
@@ -69,10 +78,12 @@ to at least one before granting another account write or maintain permission.
 
 ## Prepare a release
 
-1. Open a release pull request that changes only release-owned files, such as
-   package and registry versions plus intentional release documentation.
-2. Confirm the required CI check passes and merge the pull request with squash
-   merge.
+1. Open a release pull request that changes only release-owned files. Update
+   package and registry versions, move the curated `Unreleased` entries into a
+   dated section for that version, add a new empty `Unreleased` section, and
+   update its compare link.
+2. Run `npm run changelog:check`. Confirm the required CI check passes and merge
+   the pull request with squash merge.
 3. Create an annotated tag from the merged commit and push only that tag:
 
    ```bash
@@ -87,8 +98,9 @@ to at least one before granting another account write or maintain permission.
    - tag: the exact version tag
    - stage package: enabled
 5. Approve the `npm-release` GitHub environment deployment.
-6. Review the draft GitHub Release. Its notes should contain only the expected
-   pull requests and contributor mentions.
+6. Review the draft GitHub Release. Its opening highlights must match the
+   versioned changelog section. Its generated details should contain only the
+   expected pull requests and contributor mentions.
 7. Review the staged package on npm. Inspect its manifest, provenance, files,
    version, dist-tag, and repository before approving it with 2FA.
 
@@ -144,8 +156,14 @@ Apply the narrowest release-note label before merging:
 | `bug` | Fixes |
 | `documentation` | Documentation |
 | `dependencies` | Dependencies |
+| `maintenance` | Maintenance |
 | `skip-changelog` | Excluded |
-| no matching label | Maintenance |
+
+Each pull request must have exactly one of these labels. It must also fill the
+`Release note` section with one public sentence and select one version impact.
+`skip-changelog` requires a short `Not applicable:` reason and version impact
+`none`. CI evaluates the event payload directly and reruns when labels or the
+pull-request body change.
 
 Pull requests from `dependabot[bot]` and `github-actions[bot]` are excluded from
 the contributor list. Do not add AI agents as human co-authors. Record AI use in

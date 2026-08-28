@@ -2,6 +2,13 @@ name: CI
 
 on:
   pull_request:
+    types:
+      - opened
+      - synchronize
+      - reopened
+      - edited
+      - labeled
+      - unlabeled
   push:
     branches:
       - main
@@ -97,8 +104,15 @@ jobs:
           cache: npm
           cache-dependency-path: package-lock.json
 
+      - name: Validate pull request release metadata
+        if: ${{ github.event_name == 'pull_request' }}
+        run: node scripts/release-metadata.mjs "${GITHUB_EVENT_PATH}"
+
       - name: Install locked dependencies
         run: npm ci --ignore-scripts
+
+      - name: Validate changelog
+        run: npm run changelog:check
 
       - name: Check registry metadata consistency
         run: |
