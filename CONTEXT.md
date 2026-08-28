@@ -112,8 +112,8 @@ _Avoid_: Invoice Amount, Booked Order Value, Collected Cash
 
 **Receivable Project Reference**:
 The operator-entered project or business context stored in the Sales Invoice
-API `memo` field and displayed in the Kledo Web UI as Reference.
-_Avoid_: Invoice Number, API Reference Field
+API `memo` field and normalized as `projectReference`.
+_Avoid_: Invoice Number, Document Number
 
 ## Customer activity
 

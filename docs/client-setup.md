@@ -1,5 +1,10 @@
 # Client setup
 
+Any MCP client that can launch a local stdio server and inject environment
+variables can use Kledo MCP. The named clients below are non-exhaustive setup
+examples, not runtime dependencies. Browser steps are performed by the human
+operator only.
+
 Build the project and configure credentials first:
 
 ```bash
@@ -152,7 +157,7 @@ IDs locally with a read-only SQLite client when needed.
 
 ## Visual debugging with MCP Inspector
 
-Launch the pinned official Inspector web UI:
+Launch the pinned official Inspector interface:
 
 ```bash
 npm run debug:mcp
@@ -236,7 +241,7 @@ fixture with:
 
 The stderr panel shows a sanitized customer-total request followed by bounded
 invoice drill-down requests. The result maps API `memo` to
-`projectReference`, records the Web UI label in `provenance`, and never returns
+`projectReference`, records the API source in `provenance`, and never returns
 fixture contact email. The equivalent terminal trace is
 `npm run test:trace:receivable`.
 

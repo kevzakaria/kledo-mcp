@@ -17,19 +17,89 @@ flowchart LR
     C --> U
 ```
 
+## Query state machine
+
+Every MCP-capable client enters the same runtime state machine. Credential
+setup and optional identity warm-up happen before this flow; browser automation
+and developer inspection tools are not runtime states.
+
 ```mermaid
 stateDiagram-v2
-    [*] --> ValidateInput
-    ValidateInput --> RejectSafely: invalid or unsupported
-    ValidateInput --> BuildAllowlistedRequest: valid
+    [*] --> ReceiveToolCall
+    ReceiveToolCall: Receive MCP tool call
+    ReceiveToolCall --> ValidateInput
+
+    state InputResult <<choice>>
+    ValidateInput --> InputResult
+    InputResult --> RejectSafely: invalid schema or unsupported combination
+    InputResult --> SelectTool: valid
+
+    state ToolRoute <<choice>>
+    SelectTool --> ToolRoute
+    ToolRoute --> BuildAllowlistedRequest: kledo_query
+    ToolRoute --> BuildAllowlistedRequest: kledo_get with numeric ID
+    ToolRoute --> CheckIdentityRequirement: kledo_report
+
+    state IdentityRequired <<choice>>
+    CheckIdentityRequirement --> IdentityRequired
+    IdentityRequired --> BuildAllowlistedRequest: direct ID or no identity needed
+    IdentityRequired --> LookupMemory: exact name needs an ID
+
+    state MemoryResult <<choice>>
+    LookupMemory --> MemoryResult
+    MemoryResult --> BuildAllowlistedRequest: exact hit
+    MemoryResult --> LookupSQLite: miss and SQLite enabled
+    MemoryResult --> FetchMasterCatalog: miss and memory-only
+
+    state SQLiteResult <<choice>>
+    LookupSQLite --> SQLiteResult
+    SQLiteResult --> BuildAllowlistedRequest: exact hit
+    SQLiteResult --> FetchMasterCatalog: miss
+
+    FetchMasterCatalog --> ValidateMasterCatalog
+    state MasterCatalogResult <<choice>>
+    ValidateMasterCatalog --> MasterCatalogResult
+    MasterCatalogResult --> RejectSafely: malformed catalog
+    MasterCatalogResult --> MatchIdentity: valid sanitized catalog
+
+    state IdentityMatch <<choice>>
+    MatchIdentity --> IdentityMatch
+    IdentityMatch --> CacheIdentity: one exact match
+    IdentityMatch --> RejectSafely: zero matches - NOT_FOUND
+    IdentityMatch --> RejectSafely: multiple matches - AMBIGUOUS
+    CacheIdentity: Update memory and optional SQLite
+    CacheIdentity --> BuildAllowlistedRequest
+
     BuildAllowlistedRequest --> FetchKledo
-    FetchKledo --> RejectSafely: auth, timeout, rate limit, or schema error
-    FetchKledo --> Normalize
-    Normalize --> BoundAndFrame
-    BoundAndFrame --> ReturnResult
+    FetchKledo --> ValidateUpstream: successful response
+    FetchKledo --> RejectSafely: auth, timeout, rate limit, or HTTP error
+    ValidateUpstream --> Normalize: valid schema
+    ValidateUpstream --> RejectSafely: malformed response
+
+    Normalize --> ApplyBoundedExpansion
+    state ExpansionRoute <<choice>>
+    ApplyBoundedExpansion --> ExpansionRoute
+    ExpansionRoute --> JoinTypedRelations: lineage or payment events
+    ExpansionRoute --> ValidatePdf: print_document
+    ExpansionRoute --> BoundResult: no expansion requested
+    JoinTypedRelations --> BoundResult: valid complete join
+    JoinTypedRelations --> RejectSafely: conflicting required relation data
+    ValidatePdf --> BoundResult: valid same-origin bounded PDF
+    ValidatePdf --> RejectSafely: redirect, MIME, byte, timeout, or frame violation
+
+    BoundResult --> FrameResponse
+    FrameResponse --> ReturnResult: fits MCP frame
+    FrameResponse --> RejectSafely: frame too large
     ReturnResult --> [*]
-    RejectSafely --> [*]
+    RejectSafely --> ReturnSafeError
+    ReturnSafeError --> [*]
 ```
+
+The identity catalog is an optimization, not an alternate business-data
+source. A missing or ambiguous name never causes the server to guess an ID.
+Every successful path returns a normalized, bounded response; every rejected
+path returns a sanitized MCP error without exposing credentials or raw upstream
+payloads.
 
 ## Product boundaries
 
@@ -115,7 +185,7 @@ bytes are included in the final frame budget calculation.
 - `receivable_by_invoice` pages Kledo's authoritative Aged Receivable customer
   summary, then completely consumes the invoice drill-down for each customer on
   that page. Customer totals are checked across both sources, `memo` is exposed
-  as the Web UI project/reference concept, and a remaining customer cursor keeps
+  as the normalized `projectReference`, and a remaining customer cursor keeps
   the result explicitly incomplete.
 - `item_price_analysis` resolves exactly one active product before fetching
   product detail, latest sell and buy prices, Purchase Invoice product rows, and

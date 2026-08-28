@@ -319,7 +319,7 @@ export const kledoReportInputSchema = z.discriminatedUnion('report', [
       report: z
         .literal('receivable_by_invoice')
         .describe(
-          'Customer receivable totals with the complete invoice drill-down for each returned customer. API memo is exposed as projectReference because Kledo displays it as Reference in the Web UI.',
+          'Customer receivable totals with the complete invoice drill-down for each returned customer. API memo is exposed as the normalized projectReference field.',
         ),
       asOf: isoDateSchema,
       pageSize: receivableCustomerPageSizeSchema,
@@ -873,7 +873,6 @@ const receivableByInvoiceReportOutputSchema = z
         projectReference: z
           .object({
             apiField: z.literal('memo'),
-            webUiField: z.literal('Reference'),
           })
           .strict(),
       })

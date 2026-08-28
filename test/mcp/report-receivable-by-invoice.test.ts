@@ -73,7 +73,7 @@ describe('kledo_report receivable by invoice', () => {
     return client
   }
 
-  it('returns invoice numbers and API memo as the Web UI project/reference field', async () => {
+  it('returns invoice numbers and normalizes API memo as projectReference', async () => {
     const requestedUrls: string[] = []
     const client = await connectClient((request, response) => {
       requestedUrls.push(request.url ?? '')
@@ -219,7 +219,7 @@ describe('kledo_report receivable by invoice', () => {
       provenance: {
         customerTotals: '/reportings/agedReceivable',
         invoiceBreakdown: '/reportings/agedReceivableDetail/:contactId',
-        projectReference: { apiField: 'memo', webUiField: 'Reference' },
+        projectReference: { apiField: 'memo' },
       },
       meta: {
         fetchedAt: '2026-08-27T01:00:00.000Z',
@@ -227,7 +227,7 @@ describe('kledo_report receivable by invoice', () => {
         source: 'kledo_semantic_adapter',
         complete: true,
         warnings: [
-          "projectReference is Kledo's memo field, displayed as Reference in the Web UI.",
+          "projectReference is sourced from Kledo's memo field.",
           'Each returned customer includes the complete invoice drill-down reported by Kledo for the selected as-of date.',
         ],
       },

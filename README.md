@@ -14,8 +14,8 @@
 > atau endorsement dari Kledo.
 >
 > Repo ini berawal dari kebutuhan sehari-hari: supaya data Kledo bisa ditanya
-> lewat ChatGPT, Claude, Hermes, Codex, Cursor, atau klien MCP lainnya tanpa
-> membuka akses tulis yang tidak perlu.
+> lewat klien, harness, atau model AI apa pun yang mendukung MCP tanpa membuka
+> akses tulis yang tidak perlu.
 >
 > Banyak bagian repo dikerjakan bareng AI coding agent. Maintainer manusia tetap
 > pegang keputusan soal scope, keamanan, review, dan release.
@@ -25,6 +25,10 @@ Kledo MCP adalah jembatan
 read-only untuk membaca satu tenant Kledo yang dikonfigurasi oleh pengguna.
 Saat ini sengaja cuma ada tiga tool. Endpoint mentah, credential, dan detail
 pagination tidak pernah diberikan langsung ke model AI.
+
+Server ini MCP-client agnostic. Runtime tidak membutuhkan browser automation,
+session aplikasi Kledo, atau model AI tertentu. Browser hanya dipakai manusia
+untuk setup credential; MCP Inspector adalah alat debugging yang opsional.
 
 **Status:** masih preview `0.1.x`. Kontrak tool dijaga kecil sambil bentuk
 response dan perilaku report terus dicek.
@@ -115,8 +119,8 @@ customer. `sales_order_kpi` menghitung deal intake SO untuk periode dan
 salesperson opsional dari seluruh halaman API; booked value bukan omset,
 invoice, atau kas. `dormant_customers` mencari kandidat follow-up berdasarkan aktivitas
 historis yang tidak muncul lagi di window terbaru, `receivable_by_invoice`
-menjawab piutang per customer/invoice dan memetakan API `memo` ke Reference atau
-proyek di Web UI, `item_price_analysis`
+menjawab piutang per customer/invoice dan mengekspos API `memo` sebagai
+`projectReference`, `item_price_analysis`
 memisahkan harga katalog, harga transaksi terakhir, dan profitabilitas periode
 untuk satu produk, dan `sales_by_period` khusus untuk bucket waktu. Kalau nama
 produk cocok ke lebih dari satu barang, caller wajib mengulang dengan SKU yang
@@ -156,7 +160,7 @@ dan [dokumen arsitektur repo](docs/architecture.md).
 | [Konfigurasi](docs/configuration.md) | Wizard, setup manual, secret manager, dan beberapa tenant |
 | [Setup klien](docs/client-setup.md) | Hermes, Codex, Claude Desktop, Cursor, dan MCP Inspector |
 | [Referensi tool](docs/tool-reference.md) | Kontrak tool, katalog entity, report, dan contoh pertanyaan |
-| [Peta siklus dokumen](docs/kledo-document-cycle-map.md) | Mapping QU/SO/DO/INV/IP dan PQ/PO/PD/PI/PP antara UI, API, dan MCP |
+| [Peta siklus dokumen](docs/kledo-document-cycle-map.md) | Mapping QU/SO/DO/INV/IP dan PQ/PO/PD/PI/PP antara tipe transaksi, API, dan MCP |
 | [Arsitektur](docs/architecture.md) | Alur data, versi protokol, batasan, transport, dan safe failure |
 | [Kebijakan keamanan](SECURITY.md) | Cara melaporkan celah keamanan dan menjaga credential |
 

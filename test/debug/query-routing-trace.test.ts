@@ -9,10 +9,10 @@ import { createKledoHttpGateway } from '../../src/kledo/http-gateway.js'
 import { createKledoMcpServer } from '../../src/server/create-server.js'
 
 const trace = (message: string): void => {
-  if (process.env.KLEDO_TEST_TRACE === '1') console.log(`[ui-parity] ${message}`)
+  if (process.env.KLEDO_TEST_TRACE === '1') console.log(`[query-routing] ${message}`)
 }
 
-describe('Kledo UI-derived query parity', () => {
+describe('Kledo query routing contract', () => {
   const closeables: Array<{ close(): Promise<void> }> = []
 
   afterEach(async () => {
@@ -106,12 +106,12 @@ describe('Kledo UI-derived query parity', () => {
 
     const gateway = createKledoHttpGateway({
       baseUrl: new URL(`http://127.0.0.1:${port}/api/v1/`),
-      token: 'synthetic-ui-parity-token',
+      token: 'synthetic-query-routing-token',
       allowInsecureLoopback: true,
       now: () => new Date('2026-08-27T01:00:00.000Z'),
     })
     const client = new Client(
-      { name: 'kledo-ui-parity-test', version: '0.1.0' },
+      { name: 'kledo-query-routing-test', version: '0.1.0' },
       { versionNegotiation: { mode: { pin: '2026-07-28' } } },
     )
     const [clientTransport, serverTransport] = InMemoryTransport.createLinkedPair()
@@ -128,7 +128,7 @@ describe('Kledo UI-derived query parity', () => {
       value: { from: '2025-08-27', to: '2026-08-27' },
     }
 
-    trace('UI Sales Order -> MCP sales_order -> finance/orders')
+    trace('MCP sales_order -> finance/orders')
     const salesOrders = await client.callTool({
       name: 'kledo_query',
       arguments: { entity: 'sales_order', filters: [periodFilter], pageSize: 100 },
@@ -140,7 +140,7 @@ describe('Kledo UI-derived query parity', () => {
       pageInfo: { hasMore: false, total: 1 },
     })
 
-    trace('UI Invoice -> MCP sales_invoice -> finance/invoices')
+    trace('MCP sales_invoice -> finance/invoices')
     const invoices = await client.callTool({
       name: 'kledo_query',
       arguments: { entity: 'sales_invoice', filters: [periodFilter], pageSize: 100 },
@@ -152,7 +152,7 @@ describe('Kledo UI-derived query parity', () => {
       pageInfo: { hasMore: false, total: 1 },
     })
 
-    trace('UI Product/material -> MCP product -> finance/products')
+    trace('MCP product -> finance/products')
     const products = await client.callTool({
       name: 'kledo_query',
       arguments: {

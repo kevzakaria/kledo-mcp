@@ -13,9 +13,8 @@
 > open-source project as a Kledo user. It is not affiliated with, sponsored by,
 > endorsed by, or supported by Kledo.
 >
-> I built it because I needed a narrow, read-only bridge between Kledo and
-> MCP-capable AI agents or harnesses such as ChatGPT, Claude, Hermes, Codex,
-> Cursor, and other compatible clients.
+> I built it because I needed a narrow, read-only bridge between Kledo and any
+> client, harness, or AI model that supports MCP.
 >
 > I maintain the repository with substantial help from AI coding agents. Human
 > maintainers remain responsible for scope, security, review, and releases.
@@ -25,6 +24,10 @@ Kledo MCP is a minimal, read-only
 one caller-configured Kledo tenant. I expose exactly three bounded tools over
 stdio and keep raw endpoints, credentials, and pagination mechanics out of the
 AI model's interface.
+
+The server is MCP-client agnostic. Runtime does not require browser automation,
+a Kledo application session, or a particular AI model. A human uses the browser
+only for credential setup; MCP Inspector is optional developer tooling.
 
 **Status:** `0.1.x` preview. I am intentionally keeping the interface small
 while response shapes and report behavior are verified.
@@ -130,8 +133,8 @@ salesperson; booked value is not revenue, invoice value, or cash.
 for time buckets. `dormant_customers` finds bounded human follow-up candidates
 with historical income activity that is absent from the recent window; it is
 not proof of churn and never sends a message. `receivable_by_invoice` returns
-customer and invoice-level receivables while mapping API `memo` to the Web UI
-Reference/project field. `item_price_analysis` keeps
+customer and invoice-level receivables while exposing API `memo` as the
+normalized `projectReference` field. `item_price_analysis` keeps
 catalog settings, latest transaction prices, and period profitability separate
 for one product; multiple name matches require an exact SKU. Sanitized
 master-reference mappings stay in memory by default. A tenant-scoped local
@@ -156,7 +159,7 @@ locator stays internal.
 | [Configuration](docs/configuration.md) | Wizard, manual setup, secret handling, and multiple tenants |
 | [Client setup](docs/client-setup.md) | Hermes, Codex, Claude Desktop, Cursor, and MCP Inspector |
 | [Tool reference](docs/tool-reference.md) | Tool contracts, entity catalog, reports, and example questions |
-| [Document cycle map](docs/kledo-document-cycle-map.md) | QU/SO/DO/INV/IP and PQ/PO/PD/PI/PP mapping across UI, API, and MCP |
+| [Document cycle map](docs/kledo-document-cycle-map.md) | QU/SO/DO/INV/IP and PQ/PO/PD/PI/PP mapping across transaction types, API, and MCP |
 | [Architecture](docs/architecture.md) | Data flow, protocol target, boundaries, transport behavior, and safe failures |
 | [Security policy](SECURITY.md) | Vulnerability reporting and credential safety |
 
