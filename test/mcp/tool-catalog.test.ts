@@ -144,8 +144,26 @@ describe('Kledo MCP tool catalog', () => {
     expect(queryProperties?.fields?.items?.description).toMatch(/sales_invoice.*contact=.*displayName/is)
 
     const getTool = tools.find(({ name }) => name === 'kledo_get')
-    expect(getTool?.inputSchema).toMatchObject({
+    const getInputSchema = getTool?.inputSchema as
+      | (NonNullable<typeof getTool>['inputSchema'] & {
+          oneOf?: Array<{
+            required?: string[]
+            not?: { required?: string[] }
+            properties?: { entity?: { enum?: string[] } }
+          }>
+        })
+      | undefined
+    expect(getTool?.description).toMatch(
+      /exactly one locator.*documentNumber.*numeric id.*bounded live Kledo search.*never needs to know Kledo's internal ID/is,
+    )
+    expect(getInputSchema).toMatchObject({
       properties: {
+        id: { type: 'string' },
+        documentNumber: {
+          type: 'string',
+          maxLength: 200,
+          description: expect.stringMatching(/human-visible Kledo Document Number/i),
+        },
         include: {
           items: {
             enum: [
@@ -164,6 +182,30 @@ describe('Kledo MCP tool catalog', () => {
         paymentEventLimit: { default: 50, minimum: 1, maximum: 200 },
       },
     })
+    expect(getInputSchema?.oneOf).toEqual([
+      {
+        required: ['id'],
+        not: { required: ['documentNumber'] },
+      },
+      {
+        required: ['documentNumber'],
+        not: { required: ['id'] },
+        properties: {
+          entity: {
+            enum: [
+              'sales_quote',
+              'sales_order',
+              'sales_delivery',
+              'sales_invoice',
+              'purchase_quote',
+              'purchase_order',
+              'purchase_delivery',
+              'purchase_invoice',
+            ],
+          },
+        },
+      },
+    ])
     expect(getTool?.outputSchema).toMatchObject({
       properties: {
         invoicePayments: { type: 'array' },

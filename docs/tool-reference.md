@@ -15,9 +15,24 @@ keys, optional selected fields, `pageSize` with a default of 20 and maximum of
 
 ## `kledo_get`
 
-Retrieves one normalized record by entity and numeric Kledo ID. Optional
-`line_items` and `relation_ids` includes are bounded. Relationships are returned
-only when already present in the detail response and are never followed
+Retrieves one normalized record using exactly one locator:
+
+- `documentNumber`: the exact human-visible number for a Sales Quote, Sales
+  Order, Sales Delivery, Sales Invoice, Purchase Quote, Purchase Order, Purchase
+  Delivery, or Purchase Invoice; or
+- `id`: a numeric Kledo ID already returned by a previous MCP result.
+
+Users normally supply a Document Number such as `INV/FIXTURE/462`; they never
+need to discover the internal numeric ID. The server performs a bounded live
+search inside the selected document entity, compares the complete Document
+Number case-insensitively, rejects zero exact matches as `NOT_FOUND`, and
+rejects duplicate exact matches as `AMBIGUOUS`. It scans at most 10,000 search
+results and does not store transactional Document Numbers in SQLite.
+
+For non-document entities, first use `kledo_query` to obtain a numeric ID. The
+`id` fast path also remains backward compatible for agents chaining MCP calls.
+Optional `line_items` and `relation_ids` includes are bounded. Relationships are
+returned only when already present in the detail response and are never followed
 recursively.
 
 For `sales_invoice` and `purchase_invoice`, `document_lineage` validates the
@@ -191,11 +206,11 @@ The MCP client chooses a tool. Users do not need to know Kledo endpoint names.
 | --- | --- |
 | "Show the latest 20 sales invoices." | `kledo_query` |
 | "Find invoices for PT Maju Jaya." | `kledo_query` |
-| "Show the line items for invoice ID 123." | `kledo_get` |
-| "List direct payment events and destination accounts for invoice ID 123." | `kledo_get` with `invoice_payments` |
-| "Trace invoice ID 123 back through its quote, order, delivery, and payments." | `kledo_get` with `document_lineage` and `payment_events` |
-| "Trace purchase invoice ID 456 back through its quote, order, delivery, and payment." | `kledo_get` with `document_lineage` and `payment_events` |
-| "Give me the printable PDF for Sales Invoice ID 123." | `kledo_get` with `print_document` |
+| "Is INV/FIXTURE/462 paid, and when was it last updated?" | `kledo_get` by `documentNumber`, with `payment_events` when payment history is needed |
+| "Show the line items for SO/FIXTURE/606." | `kledo_get` by `documentNumber` with `line_items` |
+| "Trace INV/FIXTURE/462 back through its quote, order, delivery, and payments." | `kledo_get` by `documentNumber` with `document_lineage` and `payment_events` |
+| "Trace PI/FIXTURE/456 back through its quote, order, delivery, and payment." | `kledo_get` by `documentNumber` with `document_lineage` and `payment_events` |
+| "Give me the printable PDF for INV/FIXTURE/462." | `kledo_get` by `documentNumber` with `print_document` |
 | "What is the aged receivable position as of today?" | `kledo_report` |
 | "Which customers owe us, which invoices, and what project is each invoice for?" | `kledo_report` with `receivable_by_invoice` |
 | "Compare sales this month with last month." | `kledo_report` |
@@ -221,8 +236,10 @@ Version `0.1.0` implements the complete catalog above:
 - `product` and `unit` do not have a documented ordinary `page` parameter. If
   Kledo reports more data than the bounded response, the result is marked
   incomplete instead of inventing an unsupported continuation;
-- `kledo_get` routes all 14 entities with detail GET endpoints. `unit` is absent
-  from the detail schema because Kledo exposes no unit detail GET;
+- `kledo_get` routes all 14 entities with detail GET endpoints. The eight
+  commercial document entities additionally accept an exact human-visible
+  `documentNumber`; `unit` is absent from the detail schema because Kledo
+  exposes no unit detail GET;
 - transaction documents support bounded `line_items` and directly present
   `relation_ids` without recursive graph requests;
 - sales and purchase invoice detail can include bounded typed QU -> SO -> DO or

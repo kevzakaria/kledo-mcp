@@ -105,7 +105,7 @@ Pakai secret manager lain atau ingin mengatur environment sendiri? Baca
 | Tool | Fungsinya |
 | --- | --- |
 | `kledo_query` | Mencari atau membaca halaman entity Kledo yang ada di allowlist |
-| `kledo_get` | Mengambil satu record yang sudah dinormalisasi beserta relasi terbatas |
+| `kledo_get` | Mengambil satu record lewat nomor dokumen yang terlihat user atau ID dari hasil MCP sebelumnya |
 | `kledo_report` | Menjalankan report native atau analisis semantic read-only yang ada di allowlist |
 
 Tidak ada tool untuk membuat atau mengubah record, mengganti tenant saat tool
@@ -132,7 +132,10 @@ Mapping salesperson yang masih fresh sudah dipakai untuk merutekan report
 dengan ID; jenis lain disiapkan untuk semantic routing berikutnya. Semua katalog
 bisa diisi lebih dulu dengan `npm run warmup` setelah opt-in tanpa menambah tool
 MCP baru.
-Untuk Sales Invoice dan Purchase Invoice, `kledo_get` juga bisa mengembalikan
+Untuk QU, SO, DO, INV, PQ, PO, PD, dan PI, user cukup menyebut nomor dokumen;
+`kledo_get` mencari exact match secara live dan menyembunyikan numeric ID Kledo.
+Nomor dokumen transaksional tidak disimpan di SQLite. Untuk Sales Invoice dan
+Purchase Invoice, `kledo_get` juga bisa mengembalikan
 lineage bertipe `QU -> SO -> DO -> INV` / `PQ -> PO -> PD -> PI` serta event
 `IP` / `PP` yang sudah dicocokkan dari sumber relasi dan transaksi Kledo,
 tetap melalui tool yang sama. `purchase_quote` juga tersedia lewat

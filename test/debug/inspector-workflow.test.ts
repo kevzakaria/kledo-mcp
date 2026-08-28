@@ -411,7 +411,7 @@ describe('visual MCP Inspector workflow', () => {
         '--tool-arg',
         'entity=sales_invoice',
         '--tool-arg',
-        'id="500"',
+        'documentNumber="INV/FIXTURE/500"',
         '--tool-arg',
         'include=["document_lineage","payment_events"]',
         '--format',
@@ -458,6 +458,8 @@ describe('visual MCP Inspector workflow', () => {
       ],
       truncation: { documentLineage: false, paymentEvents: false },
     })
+    expect(result.stderr).toContain('get.document_number.search.request')
+    expect(result.stderr).toContain('upstream.get.document_number.search requested')
     expect(result.stderr).toContain('get.sales_invoice.detail.request')
     expect(result.stderr).toContain('get.sales_invoice.payment_events.request')
     expect(result.stderr).not.toContain('synthetic-inspector-token')

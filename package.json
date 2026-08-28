@@ -64,6 +64,7 @@
     "test:trace:orders": "NODE_OPTIONS=--disable-warning=ExperimentalWarning KLEDO_TEST_TRACE=1 vitest run test/mcp/report-sales-order-kpi.test.ts -t \"sums every page-level\" --reporter=default --disableConsoleIntercept --no-color",
     "test:trace:lineage": "NODE_OPTIONS=--disable-warning=ExperimentalWarning KLEDO_TEST_TRACE=1 vitest run test/mcp/get-sales-invoice-lineage.test.ts --reporter=default --disableConsoleIntercept --no-color",
     "test:trace:purchase-lineage": "NODE_OPTIONS=--disable-warning=ExperimentalWarning KLEDO_TEST_TRACE=1 vitest run test/mcp/get-purchase-invoice-lineage.test.ts --reporter=default --disableConsoleIntercept --no-color",
+    "test:trace:document-number": "NODE_OPTIONS=--disable-warning=ExperimentalWarning KLEDO_TEST_TRACE=1 vitest run test/mcp/get-by-document-number.test.ts -t \"returns the exact Sales Invoice\" --reporter=default --disableConsoleIntercept --no-color",
     "test:trace:print-document": "NODE_OPTIONS=--disable-warning=ExperimentalWarning KLEDO_TEST_TRACE=1 vitest run test/mcp/get-sales-invoice-print-document.test.ts -t \"retrieves a bounded PDF\" --reporter=default --disableConsoleIntercept --no-color",
     "test:trace:routing": "NODE_OPTIONS=--disable-warning=ExperimentalWarning KLEDO_TEST_TRACE=1 vitest run test/debug/query-routing-trace.test.ts --reporter=default --disableConsoleIntercept --no-color",
     "test:wizard": "node test/setup-wizard.mjs",

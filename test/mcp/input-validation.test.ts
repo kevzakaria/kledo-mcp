@@ -8,6 +8,36 @@ import {
 } from '../../src/tools/schemas.js'
 
 describe('public MCP input validation', () => {
+  it('accepts exactly one machine ID or human-visible Document Number locator', () => {
+    for (const entity of [
+      'sales_quote',
+      'sales_order',
+      'sales_delivery',
+      'sales_invoice',
+      'purchase_quote',
+      'purchase_order',
+      'purchase_delivery',
+      'purchase_invoice',
+    ]) {
+      expect(
+        kledoGetInputSchema.safeParse({
+          entity,
+          documentNumber: 'INV/FIXTURE/462',
+        }).success,
+        entity,
+      ).toBe(true)
+    }
+
+    for (const input of [
+      { entity: 'sales_invoice' },
+      { entity: 'sales_invoice', id: '462', documentNumber: 'INV/FIXTURE/462' },
+      { entity: 'contact', documentNumber: 'INV/FIXTURE/462' },
+      { entity: 'sales_invoice', documentNumber: 'x'.repeat(201) },
+    ]) {
+      expect(kledoGetInputSchema.safeParse(input).success, JSON.stringify(input)).toBe(false)
+    }
+  })
+
   it('accepts bounded positive decimal IDs and rejects zero or oversized IDs', () => {
     expect(
       kledoGetInputSchema.safeParse({

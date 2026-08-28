@@ -251,15 +251,15 @@ call the fixture with:
 ```json
 {
   "entity": "sales_invoice",
-  "id": "500",
+  "documentNumber": "INV/FIXTURE/500",
   "include": ["document_lineage", "payment_events"]
 }
 ```
 
 The result shows `QU -> SO -> DO -> INV` as typed documents and a joined `IP`
-event. The stderr panel shows only the sanitized detail and payment-event
-request stages. IDs must stay quoted strings in both the Inspector form and CLI.
-The equivalent visible terminal trace is `npm run test:trace:lineage`.
+event. The stderr panel shows the bounded Document Number lookup followed by
+the sanitized detail and payment-event request stages. The equivalent visible
+terminal trace is `npm run test:trace:document-number`.
 
 To see the PDF path without using live accounting data, call the same fixture
 with:

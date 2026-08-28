@@ -13,6 +13,27 @@ export const kledoDocumentTypes = [
 
 export type KledoDocumentType = (typeof kledoDocumentTypes)[number]
 
+export const kledoCommercialDocumentTypes = [
+  'sales_quote',
+  'sales_order',
+  'sales_delivery',
+  'sales_invoice',
+  'purchase_quote',
+  'purchase_order',
+  'purchase_delivery',
+  'purchase_invoice',
+] as const
+
+export type KledoCommercialDocumentType = (typeof kledoCommercialDocumentTypes)[number]
+
+const kledoCommercialDocumentTypeSet = new Set<string>(kledoCommercialDocumentTypes)
+
+export function isKledoCommercialDocumentType(
+  value: string,
+): value is KledoCommercialDocumentType {
+  return kledoCommercialDocumentTypeSet.has(value)
+}
+
 export const transactionTypeIdByDocumentType = {
   sales_quote: '4',
   sales_order: '6',

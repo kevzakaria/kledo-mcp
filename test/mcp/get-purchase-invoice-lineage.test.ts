@@ -111,6 +111,24 @@ describe('kledo_get Purchase Invoice document lineage', () => {
       requestedUrls.push(request.url ?? '')
       response.setHeader('content-type', 'application/json')
 
+      const url = new URL(request.url ?? '/', 'http://fixture.local')
+      if (url.pathname === '/api/v1/finance/purchaseInvoices') {
+        expect(url.searchParams.get('search')).toBe('PI/FIXTURE/700')
+        response.end(
+          JSON.stringify({
+            success: true,
+            data: {
+              current_page: 1,
+              last_page: 1,
+              per_page: 100,
+              total: 1,
+              data: [{ id: 700, ref_number: 'PI/FIXTURE/700' }],
+            },
+          }),
+        )
+        return
+      }
+
       if (request.url === '/api/v1/finance/purchaseInvoices/700') {
         traceStep('Kledo fixture API', 'Purchase Invoice detail with embedded payment facts')
         response.end(
@@ -131,13 +149,16 @@ describe('kledo_get Purchase Invoice document lineage', () => {
       name: 'kledo_get',
       arguments: {
         entity: 'purchase_invoice',
-        id: '700',
+        documentNumber: 'PI/FIXTURE/700',
         include: ['document_lineage', 'payment_events', 'relation_ids'],
       },
     })
 
     expect(result.isError, JSON.stringify(result)).not.toBe(true)
-    expect(requestedUrls).toEqual(['/api/v1/finance/purchaseInvoices/700'])
+    expect(requestedUrls).toEqual([
+      '/api/v1/finance/purchaseInvoices?search=PI%2FFIXTURE%2F700&per_page=100&page=1',
+      '/api/v1/finance/purchaseInvoices/700',
+    ])
     expect(result.structuredContent).toMatchObject({
       entity: 'purchase_invoice',
       documentLineage: {

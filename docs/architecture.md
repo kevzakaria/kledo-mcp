@@ -17,7 +17,7 @@ flowchart LR
     C --> U
 ```
 
-## Query state machine
+## MCP tool-call state machine
 
 Every MCP-capable client enters the same runtime state machine. Credential
 setup and optional identity warm-up happen before this flow; browser automation
@@ -37,13 +37,35 @@ stateDiagram-v2
     state ToolRoute <<choice>>
     SelectTool --> ToolRoute
     ToolRoute --> BuildAllowlistedRequest: kledo_query
-    ToolRoute --> BuildAllowlistedRequest: kledo_get with numeric ID
-    ToolRoute --> CheckIdentityRequirement: kledo_report
+    ToolRoute --> SelectGetLocator: kledo_get
+    ToolRoute --> SelectReportSelector: kledo_report
 
-    state IdentityRequired <<choice>>
-    CheckIdentityRequirement --> IdentityRequired
-    IdentityRequired --> BuildAllowlistedRequest: direct ID or no identity needed
-    IdentityRequired --> LookupMemory: exact name needs an ID
+    state GetLocator <<choice>>
+    SelectGetLocator --> GetLocator
+    GetLocator --> BuildAllowlistedRequest: numeric ID from an MCP result
+    GetLocator --> SearchDocumentNumber: exact human-visible Document Number
+    SearchDocumentNumber: Bounded live search in the selected document entity
+    SearchDocumentNumber --> DocumentNumberMatch
+
+    state DocumentNumberResult <<choice>>
+    DocumentNumberMatch --> DocumentNumberResult
+    DocumentNumberResult --> BuildAllowlistedRequest: one exact match
+    DocumentNumberResult --> RejectSafely: zero matches - NOT_FOUND
+    DocumentNumberResult --> RejectSafely: multiple matches - AMBIGUOUS
+
+    state ReportSelector <<choice>>
+    SelectReportSelector --> ReportSelector
+    ReportSelector --> BuildAllowlistedRequest: direct ID or no identity selector
+    ReportSelector --> LookupMemory: exact salesperson name needs an ID
+    ReportSelector --> SearchProductCatalog: product code or product name
+
+    SearchProductCatalog: Bounded live Kledo product search
+    SearchProductCatalog --> ProductMatch
+    state ProductMatchResult <<choice>>
+    ProductMatch --> ProductMatchResult
+    ProductMatchResult --> BuildAllowlistedRequest: one safe product match
+    ProductMatchResult --> RejectSafely: zero matches - NOT_FOUND
+    ProductMatchResult --> RejectSafely: multiple matches - AMBIGUOUS
 
     state MemoryResult <<choice>>
     LookupMemory --> MemoryResult
@@ -95,11 +117,14 @@ stateDiagram-v2
     ReturnSafeError --> [*]
 ```
 
-The identity catalog is an optimization, not an alternate business-data
-source. A missing or ambiguous name never causes the server to guess an ID.
-Every successful path returns a normalized, bounded response; every rejected
-path returns a sanitized MCP error without exposing credentials or raw upstream
-payloads.
+The optional identity catalog is an optimization for sanitized master-data
+name resolution, not an alternate business-data source. Its current runtime
+consumer is exact salesperson-name resolution. Human-visible Document Numbers
+are transactional locators: `kledo_get` resolves them through bounded live
+Kledo search and never persists them in SQLite. A missing or ambiguous selector
+never causes the server to guess an ID. Every successful path returns a
+normalized, bounded response; every rejected path returns a sanitized MCP error
+without exposing credentials or raw upstream payloads.
 
 ## Product boundaries
 

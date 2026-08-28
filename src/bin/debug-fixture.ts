@@ -340,6 +340,29 @@ const upstream = createServer((request, response) => {
     return
   }
 
+  if (
+    url.pathname === '/api/v1/finance/invoices' &&
+    url.searchParams.get('search') === 'INV/FIXTURE/500'
+  ) {
+    debugEvent('upstream.get.document_number.search requested')
+    response.end(
+      JSON.stringify({
+        success: true,
+        data: {
+          current_page: 1,
+          last_page: 1,
+          per_page: 100,
+          total: 2,
+          data: [
+            { id: 501, ref_number: 'INV/FIXTURE/500-OLD' },
+            { id: 500, ref_number: 'INV/FIXTURE/500' },
+          ],
+        },
+      }),
+    )
+    return
+  }
+
   if (url.pathname === '/api/v1/finance/invoices/500') {
     debugEvent('upstream.get.sales_invoice.detail requested')
     response.end(

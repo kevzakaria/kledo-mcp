@@ -6,7 +6,9 @@ import { addDecimals, compareDecimals, decimalString } from '../domain/decimal.j
 import {
   documentLifecycleRank,
   documentTypeForTransactionTypeId,
+  isKledoCommercialDocumentType,
   transactionTypeIdByDocumentType,
+  type KledoCommercialDocumentType,
   type KledoDocumentType,
 } from '../domain/document-lineage.js'
 import type { JsonValue } from '../domain/json.js'
@@ -73,6 +75,13 @@ const rawSalesInvoiceSchema = z
     memo: z.string().nullable(),
     status_id: exactIdSchema.nullable().optional(),
     updated_at: z.string().nullable().optional(),
+  })
+  .passthrough()
+
+const rawDocumentIdentitySchema = z
+  .object({
+    id: exactIdSchema,
+    ref_number: z.string().trim().min(1),
   })
   .passthrough()
 
@@ -634,6 +643,7 @@ export interface KledoGatewayDiagnosticEvent {
     | 'identity.sqlite.write'
     | 'identity.sqlite.write_failed'
     | 'identity.upstream.refresh'
+    | 'get.document_number.search.request'
     | 'get.sales_invoice.detail.request'
     | 'get.sales_invoice.payment_events.request'
     | 'get.sales_invoice.print_document.request'
@@ -2008,6 +2018,77 @@ export function createKledoHttpGateway(options: CreateKledoHttpGatewayOptions): 
     return rows[0]!
   }
 
+  const resolveDocumentNumber = async (
+    entity: KledoCommercialDocumentType,
+    suppliedDocumentNumber: string,
+    signal?: AbortSignal,
+  ): Promise<string> => {
+    const normalizedDocumentNumber = suppliedDocumentNumber
+      .trim()
+      .toLocaleLowerCase('en-US')
+    const pageSize = 100
+    const maxRecords = 10_000
+    const seenIds = new Set<string>()
+    const exactMatches: string[] = []
+    let requestedPage = 1
+
+    while (true) {
+      const definition = entityDefinitions[entity]
+      const url = new URL(definition.path, baseUrl)
+      url.searchParams.set('search', suppliedDocumentNumber)
+      url.searchParams.set('per_page', String(pageSize))
+      url.searchParams.set('page', String(requestedPage))
+      emitDiagnostic('get.document_number.search.request')
+      const body = await requestJson(url, signal)
+      const page = rawEntityPageEnvelopeSchema.parse(body).data
+      if (page.current_page !== requestedPage || page.per_page !== pageSize) {
+        throw new KledoError(
+          'SCHEMA_MISMATCH',
+          'Kledo returned inconsistent document search pagination data',
+        )
+      }
+      assertConsistentPagination(page)
+      if (page.total > maxRecords) {
+        throw new KledoError(
+          'SCHEMA_MISMATCH',
+          'Kledo returned too many documents to resolve safely',
+        )
+      }
+
+      for (const value of page.data) {
+        const document = rawDocumentIdentitySchema.parse(value)
+        const id = String(document.id)
+        if (seenIds.has(id)) {
+          throw new KledoError(
+            'SCHEMA_MISMATCH',
+            'Kledo returned duplicate document identities',
+          )
+        }
+        seenIds.add(id)
+        if (document.ref_number.toLocaleLowerCase('en-US') === normalizedDocumentNumber) {
+          exactMatches.push(id)
+        }
+      }
+
+      if (page.current_page >= page.last_page) break
+      requestedPage += 1
+    }
+
+    if (exactMatches.length === 0) {
+      throw new KledoError(
+        'NOT_FOUND',
+        'No Kledo document exactly matched the supplied Document Number',
+      )
+    }
+    if (exactMatches.length > 1) {
+      throw new KledoError(
+        'AMBIGUOUS',
+        'Multiple Kledo documents exactly matched the supplied Document Number',
+      )
+    }
+    return exactMatches[0]!
+  }
+
   return {
     async warmIdentityCatalog(signal?: AbortSignal): Promise<KledoIdentityWarmupResult> {
       if (!identityCatalog) {
@@ -2178,17 +2259,41 @@ export function createKledoHttpGateway(options: CreateKledoHttpGatewayOptions): 
     async get(input: KledoGetInput, signal?: AbortSignal): Promise<KledoGetResult> {
       validateFields(input.entity, input.fields)
       const includes = new Set(input.include ?? [])
-
+      if (Boolean(input.id) === Boolean(input.documentNumber)) {
+        invalid('Exactly one of id or documentNumber is required')
+      }
+      if (input.documentNumber && !isKledoCommercialDocumentType(input.entity)) {
+        invalid('documentNumber is supported only for commercial document entities')
+      }
       if (includes.has('print_document') && input.entity !== 'sales_invoice') {
         invalid(`${input.entity} does not support print_document`)
       }
+      if (input.entity === 'purchase_invoice' && includes.has('invoice_payments')) {
+        invalid('purchase_invoice does not support invoice_payments')
+      }
+      if (input.entity !== 'sales_invoice' && input.entity !== 'purchase_invoice') {
+        const unsupportedInvoiceInclude = (
+          ['invoice_payments', 'document_lineage', 'payment_events'] as const
+        ).find((include) => includes.has(include))
+        if (unsupportedInvoiceInclude) {
+          invalid(`${input.entity} does not support ${unsupportedInvoiceInclude}`)
+        }
+      }
+      if (includes.size > 0 && !transactionIncludeEntities.has(input.entity)) {
+        invalid(`${input.entity} does not support includes`)
+      }
+
+      let recordId = input.id
+      if (!recordId) {
+        const documentNumber = input.documentNumber
+        if (!documentNumber || !isKledoCommercialDocumentType(input.entity)) {
+          invalid('documentNumber is supported only for commercial document entities')
+        }
+        recordId = await resolveDocumentNumber(input.entity, documentNumber, signal)
+      }
 
       if (input.entity === 'purchase_invoice') {
-        if (includes.has('invoice_payments')) {
-          invalid('purchase_invoice does not support invoice_payments')
-        }
-
-        const url = new URL(`finance/purchaseInvoices/${input.id}`, baseUrl)
+        const url = new URL(`finance/purchaseInvoices/${recordId}`, baseUrl)
         emitDiagnostic('get.purchase_invoice.detail.request')
         const body = await requestJson(url, signal)
         const envelope = rawPurchaseInvoiceDetailEnvelopeSchema.parse(body)
@@ -2237,7 +2342,7 @@ export function createKledoHttpGateway(options: CreateKledoHttpGatewayOptions): 
         let omittedPaymentEventCount = 0
         if (includes.has('payment_events')) {
           const allPaymentEvents = normalizedPaymentEvents(
-            input.id,
+            recordId,
             invoice.transactions,
             invoice.relations,
             'purchase_payment',
@@ -2278,23 +2383,10 @@ export function createKledoHttpGateway(options: CreateKledoHttpGatewayOptions): 
       }
 
       if (input.entity !== 'sales_invoice') {
-        const unsupportedSalesInvoiceInclude = (
-          [
-            'invoice_payments',
-            'document_lineage',
-            'payment_events',
-          ] as const
-        ).find((include) => includes.has(include))
-        if (unsupportedSalesInvoiceInclude) {
-          invalid(`${input.entity} does not support ${unsupportedSalesInvoiceInclude}`)
-        }
-        if (includes.size > 0 && !transactionIncludeEntities.has(input.entity)) {
-          invalid(`${input.entity} does not support includes`)
-        }
         const definition = entityDefinitions[input.entity]
         if (!definition.detailPath) invalid(`${input.entity} has no detail endpoint`)
 
-        const url = new URL(`${definition.detailPath}/${input.id}`, baseUrl)
+        const url = new URL(`${definition.detailPath}/${recordId}`, baseUrl)
         const body = await requestJson(url, signal)
         const envelope = rawEntityDetailEnvelopeSchema.parse(body)
         const extras = transactionIncludeEntities.has(input.entity)
@@ -2324,7 +2416,7 @@ export function createKledoHttpGateway(options: CreateKledoHttpGatewayOptions): 
         }
       }
 
-      const url = new URL(`finance/invoices/${input.id}`, baseUrl)
+      const url = new URL(`finance/invoices/${recordId}`, baseUrl)
 
       emitDiagnostic('get.sales_invoice.detail.request')
       const body = await requestJson(url, signal)
@@ -2392,18 +2484,18 @@ export function createKledoHttpGateway(options: CreateKledoHttpGatewayOptions): 
       let paymentEvents: KledoPaymentEvent[] = []
       let omittedPaymentEventCount = 0
       if (includes.has('invoice_payments') || includes.has('payment_events')) {
-        const paymentsUrl = new URL(`finance/invoices/${input.id}/transactions`, baseUrl)
+        const paymentsUrl = new URL(`finance/invoices/${recordId}/transactions`, baseUrl)
         emitDiagnostic('get.sales_invoice.payment_events.request')
         const paymentsBody = await requestJson(paymentsUrl, signal)
         const paymentsEnvelope = rawInvoicePaymentsEnvelopeSchema.parse(paymentsBody)
         if (includes.has('invoice_payments')) {
-          const allInvoicePayments = normalizedInvoicePayments(input.id, paymentsEnvelope.data)
+          const allInvoicePayments = normalizedInvoicePayments(recordId, paymentsEnvelope.data)
           invoicePayments = allInvoicePayments.slice(0, input.invoicePaymentLimit)
           omittedInvoicePaymentCount = allInvoicePayments.length - invoicePayments.length
         }
         if (includes.has('payment_events')) {
           const allPaymentEvents = normalizedPaymentEvents(
-            input.id,
+            recordId,
             paymentsEnvelope.data,
             invoice.relations,
           )
@@ -2421,9 +2513,9 @@ export function createKledoHttpGateway(options: CreateKledoHttpGatewayOptions): 
             'This Sales Invoice does not provide a printable PDF',
           )
         }
-        const resourceUri = `kledo://sales-invoice/${input.id}/print-document.pdf`
+        const resourceUri = `kledo://sales-invoice/${recordId}/print-document.pdf`
         const printUrl = new URL(
-          `finance/invoices/${input.id}/download/${encodeURIComponent(invoice.print_url)}`,
+          `finance/invoices/${recordId}/download/${encodeURIComponent(invoice.print_url)}`,
           baseUrl,
         )
         emitDiagnostic('get.sales_invoice.print_document.request')
