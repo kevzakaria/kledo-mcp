@@ -27,12 +27,12 @@ The arrows describe the normal business cycle, not a guaranteed one-to-one chain
 | SO | `#/sales/orders` | `GET /finance/orders?trans_type_ids=6` | `GET /finance/orders/{id}` | `sales_order` query/get |
 | DO | `#/sales/deliveries` | `GET /finance/deliveries?trans_type_ids=7` | `GET /finance/deliveries/{id}` | `sales_delivery` query/get |
 | INV | `#/sales/invoices` | `GET /finance/invoices?trans_type_ids=5` | `GET /finance/invoices/{id}` | `sales_invoice` query/get; typed predecessors with `document_lineage` |
-| IP | Inside Sales Invoice detail | — | Invoice `transactions[]` and `relations[]`; `GET /finance/invoices/{id}/transactions` returns payment rows | `sales_invoice` get with joined `payment_events`; legacy `invoice_payments` remains |
+| IP | Inside Sales Invoice detail | - | Invoice `transactions[]` and `relations[]`; `GET /finance/invoices/{id}/transactions` returns payment rows | `sales_invoice` get with joined `payment_events`; legacy `invoice_payments` remains |
 | PQ | `#/purchases/quotes` | `GET /finance/purchaseQuotes` | `GET /finance/purchaseQuotes/{id}` | `purchase_quote` query/get |
 | PO | `#/purchases/purchaseorders` | `GET /finance/purchaseOrders` | `GET /finance/purchaseOrders/{id}` | `purchase_order` query/get |
 | PD | `#/purchases/deliveries` | `GET /finance/purchaseDeliveries` | `GET /finance/purchaseDeliveries/{id}` | `purchase_delivery` query/get |
 | PI | `#/purchases/purchaseinvoices` | `GET /finance/purchaseInvoices?trans_type_ids=3` | `GET /finance/purchaseInvoices/{id}` | `purchase_invoice` query/get; typed predecessors with `document_lineage` |
-| PP | Inside Purchase Invoice detail | — | Purchase Invoice `transactions[]` and `relations[]` | `purchase_invoice` get with joined `payment_events` |
+| PP | Inside Purchase Invoice detail | - | Purchase Invoice `transactions[]` and `relations[]` | `purchase_invoice` get with joined `payment_events` |
 
 The Purchase Invoice `/{id}/transactions` route was not present in the verified API. Purchase Payments are embedded in the Purchase Invoice detail response, while Sales Invoice payments are available both in the detail response and from the dedicated transactions route.
 
