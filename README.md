@@ -102,18 +102,32 @@ Pakai secret manager lain atau ingin mengatur environment sendiri? Baca
 | --- | --- |
 | `kledo_query` | Mencari atau membaca halaman entity Kledo yang ada di allowlist |
 | `kledo_get` | Mengambil satu record yang sudah dinormalisasi beserta relasi terbatas |
-| `kledo_report` | Menjalankan report native Kledo yang ada di allowlist |
+| `kledo_report` | Menjalankan report native atau analisis semantic read-only yang ada di allowlist |
 
 Tidak ada tool untuk membuat atau mengubah record, mengganti tenant saat tool
 dipanggil, mengirim pesan, mengekspor file, atau menjalankan HTTP request bebas.
 Daftar entity, report, contoh pertanyaan, dan status implementasi ada di
 [referensi tool](docs/tool-reference.md).
 
-Mapping master reference memakai memory secara default. SQLite lokal yang
-terisolasi per tenant hanya dipakai setelah operator memilih
-`KLEDO_IDENTITY_CACHE=sqlite`; `npm run warmup` kemudian dapat mengisinya tanpa
-menambah tool MCP baru.
-
+Untuk pertanyaan penjualan per salesperson, `kledo_report` memakai
+`sales_by_person`. `income_by_customer` tetap khusus untuk pengelompokan
+customer. `sales_order_kpi` menghitung deal intake SO untuk periode dan
+salesperson opsional dari seluruh halaman API; booked value bukan omset,
+invoice, atau kas. `dormant_customers` mencari kandidat follow-up berdasarkan aktivitas
+historis yang tidak muncul lagi di window terbaru, `receivable_by_invoice`
+menjawab piutang per customer/invoice dan memetakan API `memo` ke Reference atau
+proyek di Web UI, `item_price_analysis`
+memisahkan harga katalog, harga transaksi terakhir, dan profitabilitas periode
+untuk satu produk, dan `sales_by_period` khusus untuk bucket waktu. Kalau nama
+produk cocok ke lebih dari satu barang, caller wajib mengulang dengan SKU yang
+exact. Kandidat dormant bukan bukti customer sudah churn dan tidak memicu
+pengiriman pesan. Mapping nama master reference memakai memory secara default.
+SQLite lokal yang terisolasi per tenant hanya dipakai setelah operator memilih
+`KLEDO_IDENTITY_CACHE=sqlite`.
+Mapping salesperson yang masih fresh sudah dipakai untuk merutekan report
+dengan ID; jenis lain disiapkan untuk semantic routing berikutnya. Semua katalog
+bisa diisi lebih dulu dengan `npm run warmup` setelah opt-in tanpa menambah tool
+MCP baru.
 ## Versi MCP yang dipakai## Versi MCP yang dipakai
 
 Repo ini mengikuti revisi protokol MCP current,

@@ -10,6 +10,7 @@ inputs.
 flowchart LR
     U[User] --> C[MCP client]
     C -->|bounded tool call| M[kledo-mcp]
+    M -.->|optional sanitized identity persistence| S[(Local SQLite)]
     M -->|allowlisted HTTPS GET| K[Kledo API]
     K -->|tenant response| M
     M -->|normalized structured result| C
@@ -81,7 +82,56 @@ that cannot fit the MCP frame fails safely.
 - `pageInfo.hasMore` and `meta.complete` distinguish a page from a complete
   result.
 - Continuation cursors are opaque, signed, and bound to the original query.
-- Native report rows remain Kledo-shaped when their schema is undocumented.
+- Native report rows remain Kledo-shaped when their schema is undocumented,
+  except for explicitly validated adapters such as `sales_by_person`,
+  `sales_order_kpi`, `dormant_customers`, `receivable_by_invoice`, and
+  `item_price_analysis`.
+- `sales_by_person` validates Kledo's current flat response, keeps nested user
+  PII out of normalized output, and applies the signed cursor locally because
+  the upstream report does not return pagination metadata.
+- `sales_order_kpi` consumes the complete bounded Sales Order pageset and sums
+  Kledo's page-level `grand_subtotal` fields with exact decimal arithmetic.
+  Every row is checked against the requested document type, booked status set,
+  transaction-date period, and optional salesperson before the KPI is returned.
+- `dormant_customers` consumes complete bounded historical and recent
+  `incomePerCustomer` pagesets, subtracts recent customer IDs, ranks candidates
+  by historical income, and applies a signed cursor locally. It explicitly
+  reports the limits of the inference instead of claiming an exact last sale or
+  definitive churn.
+- `receivable_by_invoice` pages Kledo's authoritative Aged Receivable customer
+  summary, then completely consumes the invoice drill-down for each customer on
+  that page. Customer totals are checked across both sources, `memo` is exposed
+  as the Web UI project/reference concept, and a remaining customer cursor keeps
+  the result explicitly incomplete.
+- `item_price_analysis` resolves exactly one active product before fetching
+  product detail, latest sell and buy prices, Purchase Invoice product rows, and
+  period profitability. Multiple name matches fail rather than selecting the
+  first row. Catalog settings, transaction prices, and period HPP remain
+  separate fields with source provenance.
+
+## Tenant identity catalog
+
+Exact salesperson name resolution always uses a bounded in-memory cache. When
+the operator opts into `KLEDO_IDENTITY_CACHE=sqlite`, a local SQLite catalog
+backs that cache across process restarts and stores sanitized contact roles,
+contact types and groups, products and categories, warehouses, units, and
+finance accounts under separate entity types. Without opt-in, a missing memory
+entry is resolved from Kledo's `/users` endpoint before the native report is
+called with `sales_id`.
+
+After SQLite opt-in, the explicit `npm run warmup` adapter invokes the same
+internal refresh path before the first MCP query. It validates every allowlisted master source,
+walks paginated catalogs, derives contact-role snapshots from `type_ids`,
+flattens the product-category tree, and atomically replaces every sanitized
+tenant snapshot. It returns only counts and a timestamp. Warm-up is a local CLI
+operation, not a fourth public MCP tool.
+
+Persisted rows are scoped by a one-way digest of the configured API origin and
+bearer token. The stored payload is limited to entity type, external ID, display and
+normalized names, active state, and timestamps. Tokens, email addresses, raw
+responses, and accounting transactions are excluded. When persistence is
+enabled, SQLite failures never select an identity from another scope: the
+gateway resolves from Kledo and returns a sanitized warning.
 
 ## Safe failure behavior
 

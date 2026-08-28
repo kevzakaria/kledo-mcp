@@ -164,5 +164,118 @@ describe('Kledo MCP tool catalog', () => {
         },
       },
     })
+    const reportTool = tools.find(({ name }) => name === 'kledo_report')
+    expect(reportTool?.description).toMatch(
+      /sales_by_person.*grouped by or filtered to a salesperson.*sales_order_kpi.*deal intake.*not revenue.*income_by_customer.*group or rank customers.*dormant_customers.*not proof of churn.*receivable_by_invoice.*memo.*Reference.*item_price_analysis.*exact.*SKU.*sales_by_period.*time buckets/is,
+    )
+    const reportInput = reportTool?.inputSchema as {
+      oneOf?: unknown
+      properties?: Record<string, { enum?: string[]; type?: string }>
+      required?: string[]
+    }
+    expect(reportInput.oneOf).toBeUndefined()
+    expect(reportInput.required).toEqual(['report'])
+    expect(reportInput.properties).toMatchObject({
+      report: {
+        enum: expect.arrayContaining([
+          'sales_by_person',
+          'dormant_customers',
+          'receivable_by_invoice',
+          'item_price_analysis',
+          'sales_order_kpi',
+        ]),
+      },
+      dateBasis: { enum: ['trans_date', 'shipping_date'] },
+      salesPersonId: { type: 'string' },
+      salesPersonName: { type: 'string' },
+      pageSize: { type: 'integer' },
+      inactiveDays: { type: 'integer' },
+      historyDays: { type: 'integer' },
+      productCode: { type: 'string' },
+      productName: { type: 'string' },
+      profitabilityMethod: { enum: ['inventory', 'non_inventory', 'package'] },
+    })
+
+    const reportOutputVariants = (
+      reportTool?.outputSchema as {
+        oneOf?: Array<{
+          properties?: Record<string, unknown> & {
+            report?: { const?: string }
+            data?: { properties?: Record<string, unknown> }
+          }
+          required?: string[]
+        }>
+      }
+    ).oneOf
+    const salesByPersonOutput = reportOutputVariants?.find(
+      (variant) => variant.properties?.report?.const === 'sales_by_person',
+    )
+    expect(salesByPersonOutput?.required).toEqual([
+      'report',
+      'parameters',
+      'data',
+      'pageInfo',
+      'meta',
+    ])
+    expect(salesByPersonOutput?.properties?.data?.properties).toHaveProperty('rows')
+    const dormantCustomersOutput = reportOutputVariants?.find(
+      (variant) => variant.properties?.report?.const === 'dormant_customers',
+    )
+    expect(dormantCustomersOutput?.required).toEqual([
+      'report',
+      'parameters',
+      'data',
+      'pageInfo',
+      'meta',
+    ])
+    expect(dormantCustomersOutput?.properties?.data?.properties).toHaveProperty('candidates')
+    const itemPriceAnalysisOutput = reportOutputVariants?.find(
+      (variant) => variant.properties?.report?.const === 'item_price_analysis',
+    )
+    expect(itemPriceAnalysisOutput?.required).toEqual([
+      'report',
+      'parameters',
+      'data',
+      'provenance',
+      'meta',
+    ])
+    expect(itemPriceAnalysisOutput?.properties?.data?.properties).toEqual(
+      expect.objectContaining({
+        catalogPrices: expect.any(Object),
+        latestTransactionPrices: expect.any(Object),
+        profitability: expect.any(Object),
+      }),
+    )
+    const receivableByInvoiceOutput = reportOutputVariants?.find(
+      (variant) => variant.properties?.report?.const === 'receivable_by_invoice',
+    )
+    expect(receivableByInvoiceOutput?.required).toEqual([
+      'report',
+      'parameters',
+      'data',
+      'pageInfo',
+      'provenance',
+      'meta',
+    ])
+    expect(receivableByInvoiceOutput?.properties?.data?.properties).toHaveProperty('customers')
+    const salesOrderKpiOutput = reportOutputVariants?.find(
+      (variant) => variant.properties?.report?.const === 'sales_order_kpi',
+    )
+    expect(salesOrderKpiOutput?.required).toEqual([
+      'report',
+      'parameters',
+      'data',
+      'provenance',
+      'meta',
+    ])
+    expect(salesOrderKpiOutput?.properties?.data?.properties).toEqual(
+      expect.objectContaining({
+        orderCount: expect.any(Object),
+        orderedQuantity: expect.any(Object),
+        netBookedOrderValue: expect.any(Object),
+        grossBookedOrderValue: expect.any(Object),
+        openOrderBacklog: expect.any(Object),
+      }),
+    )
   })
 })

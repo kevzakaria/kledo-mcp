@@ -5,6 +5,7 @@ export interface KledoProcessConfig {
   baseUrl: URL
   token: string
   identityCatalogPath?: string
+  debug: boolean
 }
 
 export function loadKledoProcessConfig(
@@ -14,6 +15,7 @@ export function loadKledoProcessConfig(
   const token = environment.KLEDO_API_TOKEN?.trim()
   const identityCache = environment.KLEDO_IDENTITY_CACHE?.trim() || 'memory'
   const configuredStateDirectory = environment.KLEDO_STATE_DIR?.trim()
+  const debugValue = environment.KLEDO_DEBUG?.trim()
 
   if (!baseUrlValue) throw new Error('KLEDO_API_BASE_URL is required')
   if (!token) throw new Error('KLEDO_API_TOKEN is required')
@@ -22,6 +24,9 @@ export function loadKledoProcessConfig(
   }
   if (configuredStateDirectory && identityCache !== 'sqlite') {
     throw new Error('KLEDO_STATE_DIR requires KLEDO_IDENTITY_CACHE=sqlite')
+  }
+  if (debugValue && debugValue !== '0' && debugValue !== '1') {
+    throw new Error('KLEDO_DEBUG must be 0 or 1')
   }
 
   let baseUrl: URL
@@ -58,5 +63,6 @@ export function loadKledoProcessConfig(
     baseUrl,
     token,
     ...(identityCatalogPath ? { identityCatalogPath } : {}),
+    debug: debugValue === '1',
   }
 }

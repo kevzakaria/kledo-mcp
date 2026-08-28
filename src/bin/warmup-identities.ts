@@ -6,7 +6,16 @@ import { createKledoHttpGateway } from '../kledo/http-gateway.js'
 
 try {
   const config = loadKledoProcessConfig()
-  const gateway = createKledoHttpGateway(config)
+  const gateway = createKledoHttpGateway({
+    ...config,
+    ...(config.debug
+      ? {
+          diagnostic: ({ event }) => {
+            process.stderr.write(`[kledo-debug] ${event}\n`)
+          },
+        }
+      : {}),
+  })
   const result = await gateway.warmIdentityCatalog()
   const counts = Object.entries(result.counts)
     .map(([entityType, count]) => `${entityType}=${count}`)

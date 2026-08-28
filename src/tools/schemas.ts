@@ -27,12 +27,17 @@ export const kledoReportNameSchema = z.enum([
   'profit_loss',
   'cash_flow',
   'aged_receivable',
+  'receivable_by_invoice',
   'aged_payable',
   'bank_summary',
   'sales_by_period',
+  'sales_by_person',
+  'sales_order_kpi',
   'purchases_by_period',
   'sales_by_product',
   'income_by_customer',
+  'dormant_customers',
+  'item_price_analysis',
 ])
 
 const KLEDO_QUERY_FILTER_FIELDS = [
@@ -114,7 +119,7 @@ export const KLEDO_QUERY_FILTER_COMPATIBILITY = [
   'Filter compatibility:',
   'Use quoted strings for every ID, date, and decimal amount, including all in-list values and both between endpoints; only archived, canSell, canPurchase, and tracked use boolean values.',
   'ID filter operations default to eq only.',
-  'in is allowed only for productId on its supported transaction entities, product.categoryId, bank_transaction.transactionType, sales_order.statusId (status_id for eq; status_ids for in), and warehouseId on purchase_invoice, sales_order, purchase_order, purchase_delivery, or sales_quote.',
+  'in is allowed only for productId on its supported transaction entities, product.categoryId, bank_transaction.transactionType, sales_order.statusId (status_id for eq; status_ids for in), and warehouseId on purchase_invoice, sales_order, purchase_order, purchase_delivery, sales_quote.',
   'sales_invoice=contactId,statusId,productId,transactionDate,dueDate,shippingDate,paymentDate,amount;',
   'purchase_invoice=contactId,statusId,productId,warehouseId,transactionDate,dueDate,shippingDate,paymentDate,amount;',
   'sales_order=contactId,statusId,productId,warehouseId,salesPersonId,transactionDate,dueDate,shippingDate,paymentDate,amount;',
@@ -249,6 +254,7 @@ const idsSchema = z.array(idSchema).max(100)
 const oneIdSchema = z.array(idSchema).max(1)
 const cursorSchema = z.string().min(1).max(2048)
 const pageSizeSchema = z.number().int().min(1).max(100).default(20)
+const receivableCustomerPageSizeSchema = z.number().int().min(1).max(20).default(10)
 
 export const kledoReportInputSchema = z.discriminatedUnion('report', [
   z
@@ -296,6 +302,18 @@ export const kledoReportInputSchema = z.discriminatedUnion('report', [
     .strict(),
   z
     .object({
+      report: z
+        .literal('receivable_by_invoice')
+        .describe(
+          'Customer receivable totals with the complete invoice drill-down for each returned customer. API memo is exposed as projectReference because Kledo displays it as Reference in the Web UI.',
+        ),
+      asOf: isoDateSchema,
+      pageSize: receivableCustomerPageSizeSchema,
+      cursor: cursorSchema.optional(),
+    })
+    .strict(),
+  z
+    .object({
       report: z.literal('aged_payable'),
       asOf: isoDateSchema,
       warehouseIds: idsSchema.optional(),
@@ -322,6 +340,54 @@ export const kledoReportInputSchema = z.discriminatedUnion('report', [
     .strict(),
   z
     .object({
+      report: z
+        .literal('sales_by_person')
+        .describe(
+          'Sales grouped by salesperson. Do not use income_by_customer or invoice crawling for salesperson totals.',
+        ),
+      period: periodSchema,
+      dateBasis: z
+        .enum(['trans_date', 'shipping_date'])
+        .default('trans_date')
+        .describe('Defaults to transaction date. Use shipping_date only when explicitly requested.'),
+      salesPersonId: idSchema.optional(),
+      salesPersonName: z
+        .string()
+        .trim()
+        .min(1)
+        .max(200)
+        .describe('Exact salesperson name, matched case-insensitively through Kledo users.')
+        .optional(),
+      pageSize: pageSizeSchema,
+      cursor: cursorSchema.optional(),
+    })
+    .strict()
+    .refine(({ salesPersonId, salesPersonName }) => !(salesPersonId && salesPersonName), {
+      message: 'salesPersonId and salesPersonName are mutually exclusive',
+    }),
+  z
+    .object({
+      report: z
+        .literal('sales_order_kpi')
+        .describe(
+          'Complete Sales Order intake KPI for a bounded transaction-date period. Booked order value is not revenue, invoice value, or collected cash.',
+        ),
+      period: periodSchema,
+      salesPersonId: idSchema.optional(),
+      salesPersonName: z
+        .string()
+        .trim()
+        .min(1)
+        .max(200)
+        .describe('Exact salesperson name, matched case-insensitively through Kledo users.')
+        .optional(),
+    })
+    .strict()
+    .refine(({ salesPersonId, salesPersonName }) => !(salesPersonId && salesPersonName), {
+      message: 'salesPersonId and salesPersonName are mutually exclusive',
+    }),
+  z
+    .object({
       report: z.literal('sales_by_product'),
       period: periodSchema,
       productIds: idsSchema.optional(),
@@ -344,7 +410,139 @@ export const kledoReportInputSchema = z.discriminatedUnion('report', [
       cursor: cursorSchema.optional(),
     })
     .strict(),
+  z
+    .object({
+      report: z
+        .literal('dormant_customers')
+        .describe(
+          'Customers with bounded historical income activity and no income activity during the configured inactivity window. This is a follow-up candidate signal, not proof of churn.',
+        ),
+      asOf: isoDateSchema,
+      inactiveDays: z.number().int().min(1).max(3650).default(90),
+      historyDays: z.number().int().min(1).max(3650).default(365),
+      pageSize: pageSizeSchema,
+      cursor: cursorSchema.optional(),
+    })
+    .strict(),
+  z
+    .object({
+      report: z
+        .literal('item_price_analysis')
+        .describe(
+          'Resolve one product safely, then report distinct catalog, latest transaction-price, and period-profitability facts.',
+        ),
+      productCode: z
+        .string()
+        .trim()
+        .min(1)
+        .max(200)
+        .describe('Exact product code or SKU, matched case-insensitively.')
+        .optional(),
+      productName: z
+        .string()
+        .trim()
+        .min(1)
+        .max(200)
+        .describe(
+          'Product name search. Multiple matches fail as AMBIGUOUS and require productCode.',
+        )
+        .optional(),
+      period: periodSchema,
+      profitabilityMethod: z
+        .enum(['inventory', 'non_inventory', 'package'])
+        .default('inventory'),
+    })
+    .strict()
+    .refine(({ productCode, productName }) => Number(Boolean(productCode)) + Number(Boolean(productName)) === 1, {
+      message: 'Exactly one of productCode or productName is required',
+    }),
 ])
+
+// MCP Inspector renders top-level object properties, but currently leaves a
+// top-level oneOf without editable controls. Keep the discriminated union as
+// the authoritative validator and expose this equivalent flat input shape to
+// MCP clients so the visual debugger remains usable.
+export const kledoReportToolInputSchema = z
+  .object({
+    report: kledoReportNameSchema,
+    month: z.string().regex(/^\d{4}-(0[1-9]|1[0-2])$/).optional(),
+    asOf: isoDateSchema.optional(),
+    comparison: z
+      .object({
+        interval: z.enum(['monthly', 'quarterly', 'yearly']),
+        periods: z.number().int().min(1).max(11),
+      })
+      .strict()
+      .optional(),
+    period: periodSchema.optional(),
+    comparePeriod: periodSchema.optional(),
+    method: z.enum(['direct', 'indirect']).optional(),
+    warehouseIds: idsSchema.optional(),
+    salesPersonIds: oneIdSchema.optional(),
+    pageSize: z.number().int().min(1).max(100).optional(),
+    cursor: cursorSchema.optional(),
+    interval: z.enum(['day', 'month', 'year']).optional(),
+    unitId: idSchema.optional(),
+    contactIds: idsSchema.optional(),
+    dateBasis: z
+      .enum(['trans_date', 'shipping_date'])
+      .describe('Defaults to transaction date. Use shipping_date only when explicitly requested.')
+      .optional(),
+    salesPersonId: idSchema.optional(),
+    salesPersonName: z
+      .string()
+      .trim()
+      .min(1)
+      .max(200)
+      .describe('Exact salesperson name, matched case-insensitively through Kledo users.')
+      .optional(),
+    productIds: idsSchema.optional(),
+    groupIds: idsSchema.optional(),
+    limit: z.number().int().min(1).max(100).optional(),
+    inactiveDays: z
+      .number()
+      .int()
+      .min(1)
+      .max(3650)
+      .describe('Consecutive calendar days through asOf in which no income activity may appear.')
+      .optional(),
+    historyDays: z
+      .number()
+      .int()
+      .min(1)
+      .max(3650)
+      .describe('Calendar days before the inactivity cutoff used to establish prior activity.')
+      .optional(),
+    productCode: z
+      .string()
+      .trim()
+      .min(1)
+      .max(200)
+      .describe('Exact product code or SKU, matched case-insensitively.')
+      .optional(),
+    productName: z
+      .string()
+      .trim()
+      .min(1)
+      .max(200)
+      .describe('Product name search. Multiple matches fail as AMBIGUOUS and require productCode.')
+      .optional(),
+    profitabilityMethod: z.enum(['inventory', 'non_inventory', 'package']).optional(),
+  })
+  .strict()
+  .superRefine((input, context) => {
+    const result = kledoReportInputSchema.safeParse(input)
+    if (result.success) return
+
+    for (const issue of result.error.issues) {
+      context.addIssue({
+        code: 'custom',
+        message: issue.message,
+        path: issue.path,
+      })
+    }
+  })
+  .transform((input) => kledoReportInputSchema.parse(input))
 
 export const jsonValueSchema: z.ZodType<JsonValue> = z.lazy(() =>
   z.union([
@@ -389,6 +587,284 @@ const normalizedMoneyOutputSchema = z
     currency: z.string().nullable(),
     currencyId: z.string().regex(/^[1-9]\d{0,19}$/).optional(),
     currencyName: z.string().optional(),
+  })
+  .strict()
+
+const salespersonIdentityOutputSchema = z
+  .object({
+    id: idSchema,
+    name: z.string().trim().min(1).optional(),
+  })
+  .strict()
+
+const dormantCustomerIdentityOutputSchema = z
+  .object({
+    id: idSchema,
+    displayName: z.string().trim().min(1),
+    companyName: z.string().trim().min(1).nullable(),
+    personName: z.string().trim().min(1).nullable(),
+  })
+  .strict()
+
+const receivableOverdueOutputSchema = z
+  .object({
+    lessThanOneMonth: normalizedMoneyOutputSchema,
+    oneToTwoMonths: normalizedMoneyOutputSchema,
+    twoToThreeMonths: normalizedMoneyOutputSchema,
+    threeToFourMonths: normalizedMoneyOutputSchema,
+    moreThanFourMonths: normalizedMoneyOutputSchema,
+  })
+  .strict()
+
+const receivableTotalsOutputSchema = z
+  .object({
+    invoiceAmount: normalizedMoneyOutputSchema,
+    outstanding: normalizedMoneyOutputSchema,
+    notYetDue: normalizedMoneyOutputSchema,
+    overdue: receivableOverdueOutputSchema,
+  })
+  .strict()
+
+const salesByPersonReportOutputSchema = z
+  .object({
+    report: z.literal('sales_by_person'),
+    parameters: z
+      .object({
+        period: periodSchema,
+        dateBasis: z.enum(['trans_date', 'shipping_date']),
+        salesperson: salespersonIdentityOutputSchema.optional(),
+        pageSize: z.number().int().min(1).max(100),
+      })
+      .strict(),
+    data: z
+      .object({
+        rows: z.array(
+          z
+            .object({
+              salesperson: salespersonIdentityOutputSchema.required({ name: true }),
+              sales: normalizedMoneyOutputSchema,
+              salesCount: z
+                .number()
+                .int()
+                .nonnegative()
+                .describe(
+                  "Kledo's total_count for this salesperson; a sales-transaction count, not product quantity.",
+                ),
+              commission: normalizedMoneyOutputSchema.describe(
+                "Kledo's reported total sales commission for this salesperson and period.",
+              ),
+            })
+            .strict(),
+        ),
+      })
+      .strict(),
+    pageInfo: pageInfoSchema,
+    meta: resultMetaSchema.extend({ source: z.literal('kledo_native_report') }),
+  })
+  .strict()
+
+const salesOrderKpiReportOutputSchema = z
+  .object({
+    report: z.literal('sales_order_kpi'),
+    parameters: z
+      .object({
+        period: periodSchema,
+        dateBasis: z.literal('trans_date'),
+        salesperson: salespersonIdentityOutputSchema.optional(),
+        statusPolicy: z
+          .object({
+            name: z.literal('booked'),
+            includedStatusIds: z.tuple([z.literal('5'), z.literal('6'), z.literal('7')]),
+          })
+          .strict(),
+      })
+      .strict(),
+    data: z
+      .object({
+        orderCount: z.number().int().nonnegative(),
+        orderedQuantity: z.string().regex(/^-?\d+(?:\.\d+)?$/),
+        netBookedOrderValue: normalizedMoneyOutputSchema,
+        grossBookedOrderValue: normalizedMoneyOutputSchema,
+        openOrderBacklog: normalizedMoneyOutputSchema,
+      })
+      .strict(),
+    provenance: z
+      .object({
+        orders: z.literal('/finance/orders'),
+        transactionType: z
+          .object({ id: z.literal('6'), label: z.literal('Sales Order') })
+          .strict(),
+        aggregateFields: z
+          .object({
+            orderedQuantity: z.literal('grand_subtotal.qty'),
+            netBookedOrderValue: z.literal('grand_subtotal.amount'),
+            grossBookedOrderValue: z.literal('grand_subtotal.amount_after_tax'),
+            openOrderBacklog: z.literal('grand_subtotal.unbilled_amount'),
+          })
+          .strict(),
+        aggregateScope: z.literal('sum_of_all_page_grand_subtotals'),
+      })
+      .strict(),
+    meta: resultMetaSchema.extend({ source: z.literal('kledo_semantic_adapter') }),
+  })
+  .strict()
+
+const dormantCustomersReportOutputSchema = z
+  .object({
+    report: z.literal('dormant_customers'),
+    parameters: z
+      .object({
+        asOf: isoDateSchema,
+        inactiveDays: z.number().int().min(1).max(3650),
+        historyDays: z.number().int().min(1).max(3650),
+        inactivityCutoff: isoDateSchema,
+        historicalPeriod: periodSchema,
+        recentPeriod: periodSchema,
+        pageSize: z.number().int().min(1).max(100),
+      })
+      .strict(),
+    data: z
+      .object({
+        candidates: z.array(
+          z
+            .object({
+              customer: dormantCustomerIdentityOutputSchema,
+              historicalIncome: normalizedMoneyOutputSchema,
+              historicalTransactionCount: z.number().int().positive(),
+            })
+            .strict(),
+        ),
+      })
+      .strict(),
+    pageInfo: pageInfoSchema,
+    meta: resultMetaSchema.extend({ source: z.literal('kledo_native_report') }),
+  })
+  .strict()
+
+const itemPriceAnalysisReportOutputSchema = z
+  .object({
+    report: z.literal('item_price_analysis'),
+    parameters: z
+      .object({
+        productSelector: z
+          .union([
+            z.object({ code: z.string().trim().min(1) }).strict(),
+            z.object({ name: z.string().trim().min(1) }).strict(),
+          ]),
+        period: periodSchema,
+        profitabilityMethod: z.enum(['inventory', 'non_inventory', 'package']),
+      })
+      .strict(),
+    data: z
+      .object({
+        product: z
+          .object({
+            id: idSchema,
+            code: z.string().trim().min(1).nullable(),
+            name: z.string().trim().min(1),
+            unit: z
+              .object({ id: idSchema, name: z.string().trim().min(1) })
+              .strict()
+              .nullable(),
+            canSell: z.boolean().nullable(),
+            canPurchase: z.boolean().nullable(),
+            tracked: z.boolean().nullable(),
+          })
+          .strict(),
+        catalogPrices: z
+          .object({
+            salePrice: normalizedMoneyOutputSchema.nullable(),
+            basePurchasePrice: normalizedMoneyOutputSchema.nullable(),
+            averageInventoryCost: normalizedMoneyOutputSchema.nullable(),
+          })
+          .strict(),
+        latestTransactionPrices: z
+          .object({
+            soldUnitPrice: normalizedMoneyOutputSchema.nullable(),
+            soldTransactionDate: isoDateSchema.nullable(),
+            purchasedUnitPrice: normalizedMoneyOutputSchema.nullable(),
+            purchaseTransactionDate: isoDateSchema.nullable(),
+          })
+          .strict(),
+        profitability: z
+          .object({
+            soldQuantity: z.string().regex(/^-?\d+(?:\.\d+)?$/),
+            totalSales: normalizedMoneyOutputSchema,
+            totalCostOfGoodsSold: normalizedMoneyOutputSchema,
+            grossProfit: normalizedMoneyOutputSchema,
+            grossMarginPercent: z.string().regex(/^-?\d+(?:\.\d+)?$/),
+            averageSoldUnitPrice: normalizedMoneyOutputSchema,
+            averageCostOfGoodsSoldPerUnit: normalizedMoneyOutputSchema,
+          })
+          .strict(),
+      })
+      .strict(),
+    provenance: z
+      .object({
+        productResolution: z.literal('/finance/products'),
+        catalogPrices: z.literal('/finance/products/:id'),
+        latestSoldUnitPrice: z.literal('/finance/products/last_prices'),
+        latestPurchasedUnitPrice: z.literal('/finance/products/last_buy_prices'),
+        latestPurchaseTransaction: z.literal('/finance/products/:id/transactions'),
+        profitability: z.literal('/finance/products/:id/profitability'),
+      })
+      .strict(),
+    meta: resultMetaSchema.extend({ source: z.literal('kledo_semantic_adapter') }),
+  })
+  .strict()
+
+const receivableByInvoiceReportOutputSchema = z
+  .object({
+    report: z.literal('receivable_by_invoice'),
+    parameters: z
+      .object({
+        asOf: isoDateSchema,
+        periodType: z.literal('monthly'),
+        pageSize: z.number().int().min(1).max(20),
+      })
+      .strict(),
+    data: z
+      .object({
+        customers: z.array(
+          z
+            .object({
+              customer: dormantCustomerIdentityOutputSchema,
+              totals: receivableTotalsOutputSchema,
+              invoices: z.array(
+                z
+                  .object({
+                    id: idSchema,
+                    invoiceNumber: z.string().trim().min(1),
+                    transactionDate: isoDateSchema,
+                    dueDate: isoDateSchema.nullable(),
+                    projectReference: z.string().nullable(),
+                    invoiceAmount: normalizedMoneyOutputSchema,
+                    outstanding: normalizedMoneyOutputSchema,
+                    notYetDue: normalizedMoneyOutputSchema,
+                    transactionAgeDays: z.number().int(),
+                    dueAgeDays: z.number().int(),
+                  })
+                  .strict(),
+              ),
+            })
+            .strict(),
+        ),
+      })
+      .strict(),
+    pageInfo: pageInfoSchema,
+    provenance: z
+      .object({
+        customerTotals: z.literal('/reportings/agedReceivable'),
+        invoiceBreakdown: z.literal('/reportings/agedReceivableDetail/:contactId'),
+        projectReference: z
+          .object({
+            apiField: z.literal('memo'),
+            webUiField: z.literal('Reference'),
+          })
+          .strict(),
+      })
+      .strict(),
+    meta: resultMetaSchema.extend({ source: z.literal('kledo_semantic_adapter') }),
   })
   .strict()
 
@@ -449,15 +925,30 @@ export const kledoGetOutputSchema = z
   })
   .strict()
 
-export const kledoReportOutputSchema = z
+const otherKledoReportOutputSchema = z
   .object({
-    report: kledoReportNameSchema,
+    report: kledoReportNameSchema.exclude([
+      'sales_by_person',
+      'sales_order_kpi',
+      'dormant_customers',
+      'item_price_analysis',
+      'receivable_by_invoice',
+    ]),
     parameters: z.record(z.string(), jsonValueSchema),
     data: jsonValueSchema,
     pageInfo: pageInfoSchema.optional(),
     meta: resultMetaSchema.extend({ source: z.literal('kledo_native_report') }),
   })
   .strict()
+
+export const kledoReportOutputSchema = z.discriminatedUnion('report', [
+  salesByPersonReportOutputSchema,
+  salesOrderKpiReportOutputSchema,
+  dormantCustomersReportOutputSchema,
+  itemPriceAnalysisReportOutputSchema,
+  receivableByInvoiceReportOutputSchema,
+  otherKledoReportOutputSchema,
+])
 
 export type KledoQueryInput = z.infer<typeof kledoQueryInputSchema>
 export type KledoEntity = z.infer<typeof kledoEntitySchema>
