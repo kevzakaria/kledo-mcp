@@ -55,6 +55,7 @@ const assertSuccessfulRun = (result, label) => {
   assert.match(result.stdout, /configuration is valid/)
   assert.match(result.stdout, /Setup complete/)
   assert.match(result.stdout, /node --env-file=/)
+  assert.match(result.stdout, /warmup-identities\.js/)
   assert.equal(result.stdout.includes(dummyToken), false, `${label} leaked the token to stdout`)
   assert.equal(result.stderr.includes(dummyToken), false, `${label} leaked the token to stderr`)
 }
@@ -96,7 +97,10 @@ try {
   assert.equal((await stat(environmentFile)).mode & 0o777, 0o600)
 
   const openedUrls = (await readFile(browserLog, 'utf8')).trim().split('\n')
-  assert.deepEqual(openedUrls, ['https://app.kledo.com/', 'https://app.kledo.com/'])
+  assert.deepEqual(openedUrls, [
+    'https://app.kledo.com/#/settings/apps?activeKey=6',
+    'https://app.kledo.com/#/settings/apps?activeKey=6',
+  ])
 
   console.log('setup wizard smoke test passed')
 } finally {

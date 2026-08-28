@@ -44,10 +44,30 @@ npm ci
 npm run setup
 ```
 
-Wizard akan membangun server, menunjukkan lokasi token di **Pengaturan >
-Integrasi > Open API**, menerima token lewat input terminal tersembunyi, lalu
+Wizard akan membangun server, membuka langsung **Pengaturan > Integrasi > Open
+API**, menerima token lewat input terminal tersembunyi, lalu
 menulis `.env` yang sudah diabaikan Git dan hanya bisa dibaca oleh pemilik file.
 Validasi awal dilakukan secara lokal tanpa memanggil API Kledo.
+
+Secara default, identity mapping hanya disimpan di memory proses dan tidak
+ditulis ke disk. Kalau ingin mapping tetap tersedia setelah MCP restart, ubah
+baris berikut di `.env`:
+
+```env
+KLEDO_IDENTITY_CACHE=sqlite
+```
+
+Lalu isi katalog reference ID tenant secara eksplisit:
+
+```bash
+npm run warmup
+```
+
+Command opt-in ini membaca master data read-only untuk salesperson, contact beserta
+tipenya, contact group, product/category, warehouse, unit, dan finance account.
+SQLite lokal hanya menyimpan ID, nama tampilan, status aktif, tenant scope, dan
+timestamp yang sudah disanitasi. Output hanya menampilkan jumlah per jenis dan
+waktu refresh.
 
 Setelah wizard selesai, masukkan command yang dihasilkan ke klien MCP. Contoh
 siap salin untuk Hermes, Codex, Claude Desktop, dan Cursor ada di
@@ -73,7 +93,8 @@ Pasang dan konfigurasikan kledo-mcp dari https://github.com/kevzakaria/kledo-mcp
 
 Pakai secret manager lain atau ingin mengatur environment sendiri? Baca
 [panduan konfigurasi dan secret](docs/configuration.md). Server hanya membaca
-`KLEDO_API_BASE_URL` dan `KLEDO_API_TOKEN` dari environment proses.
+`KLEDO_API_BASE_URL`, `KLEDO_API_TOKEN`, `KLEDO_IDENTITY_CACHE`, dan
+`KLEDO_STATE_DIR` yang opsional dari environment proses.
 
 ## Tiga tool read-only
 
@@ -88,7 +109,12 @@ dipanggil, mengirim pesan, mengekspor file, atau menjalankan HTTP request bebas.
 Daftar entity, report, contoh pertanyaan, dan status implementasi ada di
 [referensi tool](docs/tool-reference.md).
 
-## Versi MCP yang dipakai
+Mapping master reference memakai memory secara default. SQLite lokal yang
+terisolasi per tenant hanya dipakai setelah operator memilih
+`KLEDO_IDENTITY_CACHE=sqlite`; `npm run warmup` kemudian dapat mengisinya tanpa
+menambah tool MCP baru.
+
+## Versi MCP yang dipakai## Versi MCP yang dipakai
 
 Repo ini mengikuti revisi protokol MCP current,
 [`2026-07-28`](https://modelcontextprotocol.io/specification/2026-07-28), dan
