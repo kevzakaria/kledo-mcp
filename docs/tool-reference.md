@@ -40,13 +40,14 @@ salesperson. It calls Kledo's native `salesPerPerson` report, defaults to
 may supply either `salesPersonId` or `salesPersonName`, never both. Exact name
 resolution is trimmed and case-insensitive. It uses `/users` on a cold bounded
 cache, retaining at most 1,000 sanitized ID/name pairs for five minutes by
-default. Fresh mappings are persisted in tenant-scoped local SQLite so they can
-be reused after a process restart. The catalog never stores user email
-addresses, tokens, raw responses, or transaction data. Kledo currently returns
-this report as a flat array. The adapter validates and locally paginates that
-array, maps `total_amount_after_tax` to sales money, exposes `total_count` as
-`salesCount` rather than product quantity, and returns the reported commission
-as a separate money value.
+default. Mappings remain memory-only unless the operator opts into
+`KLEDO_IDENTITY_CACHE=sqlite`; only then are they persisted for reuse after a
+process restart. The catalog never stores user email addresses, tokens, raw
+responses, or transaction data. Kledo currently returns this report as a flat
+array. The adapter validates and locally paginates that array, maps
+`total_amount_after_tax` to sales money, exposes `total_count` as `salesCount`
+rather than product quantity, and returns the reported commission as a separate
+money value.
 
 Use `sales_order_kpi` for Sales Order deal intake over an inclusive
 transaction-date period, optionally filtered by exact salesperson ID or name.
