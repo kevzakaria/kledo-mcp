@@ -6,7 +6,11 @@ import {
 } from '@modelcontextprotocol/server'
 
 import { KledoError, publicKledoError } from '../kledo/errors.js'
-import type { KledoGateway } from '../kledo/gateway.js'
+import {
+  KLEDO_DOCUMENT_RESOURCE,
+  type KledoDocumentResource,
+  type KledoGateway,
+} from '../kledo/gateway.js'
 import {
   KLEDO_QUERY_FILTER_COMPATIBILITY,
   kledoEntitySchema,
@@ -100,14 +104,45 @@ async function safeToolResult<T extends object>(
 ) {
   try {
     const output = await operation()
+    const documentResource = (output as T & {
+      [KLEDO_DOCUMENT_RESOURCE]?: KledoDocumentResource
+    })[KLEDO_DOCUMENT_RESOURCE]
     const mirroredResult = {
-      content: [{ type: 'text' as const, text: textMirror(output) }],
+      content: [
+        { type: 'text' as const, text: textMirror(output) },
+        ...(documentResource
+          ? [
+              {
+                type: 'resource' as const,
+                resource: {
+                  uri: documentResource.uri,
+                  mimeType: documentResource.mimeType,
+                  blob: documentResource.blob,
+                },
+              },
+            ]
+          : []),
+      ],
       structuredContent: output,
     }
     if (fitsMcpStdioFrame(mirroredResult, requestId)) return mirroredResult
 
     const compactResult = {
-      content: [{ type: 'text' as const, text: compactTextMirror(output) }],
+      content: [
+        { type: 'text' as const, text: compactTextMirror(output) },
+        ...(documentResource
+          ? [
+              {
+                type: 'resource' as const,
+                resource: {
+                  uri: documentResource.uri,
+                  mimeType: documentResource.mimeType,
+                  blob: documentResource.blob,
+                },
+              },
+            ]
+          : []),
+      ],
       structuredContent: output,
     }
     if (!fitsMcpStdioFrame(compactResult, requestId)) {
@@ -137,7 +172,7 @@ export function createKledoMcpServer({ gateway }: CreateKledoMcpServerOptions): 
     {
       title: 'Get Kledo record',
       description:
-        `Retrieve one normalized Kledo record by entity and numeric ID. Use after kledo_query when the user needs line items, relationship IDs, or invoice lifecycle details. document_lineage returns typed QU -> SO -> DO predecessors; for purchase_invoice it returns typed PQ -> PO -> PD predecessors. payment_events joins typed Invoice Payment or Purchase Payment relations to compact transaction facts. Sales payments come from the dedicated transactions endpoint; purchase payments are embedded in Purchase Invoice detail. The legacy invoice_payments include remains sales-only and returns Kledo type 17. Every payment transactionDate is that direct event date, not proof of final settlement. ${UNTRUSTED_DATA_WARNING}`,
+        `Retrieve one normalized Kledo record by entity and numeric ID. Use after kledo_query when the user needs line items, relationship IDs, invoice lifecycle details, or the bounded printable PDF for one Sales Invoice. For sales_invoice, print_document returns safe metadata plus one embedded application/pdf resource while keeping Kledo's opaque locator internal. document_lineage returns typed QU -> SO -> DO predecessors; for purchase_invoice it returns typed PQ -> PO -> PD predecessors. payment_events joins typed Invoice Payment or Purchase Payment relations to compact transaction facts. Sales payments come from the dedicated transactions endpoint; purchase payments are embedded in Purchase Invoice detail. The legacy invoice_payments include remains sales-only and returns Kledo type 17. Every payment transactionDate is that direct event date, not proof of final settlement. ${UNTRUSTED_DATA_WARNING}`,
       inputSchema: kledoGetInputSchema,
       outputSchema: kledoGetOutputSchema,
       annotations: READ_ONLY_ANNOTATIONS,

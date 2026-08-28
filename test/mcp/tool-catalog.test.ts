@@ -154,9 +154,10 @@ describe('Kledo MCP tool catalog', () => {
               'invoice_payments',
               'document_lineage',
               'payment_events',
+              'print_document',
             ],
           },
-          maxItems: 5,
+          maxItems: 6,
         },
         invoicePaymentLimit: { default: 50, minimum: 1, maximum: 200 },
         lineageLimit: { default: 50, minimum: 1, maximum: 200 },
@@ -168,6 +169,15 @@ describe('Kledo MCP tool catalog', () => {
         invoicePayments: { type: 'array' },
         documentLineage: { type: 'object' },
         paymentEvents: { type: 'array' },
+        printDocument: {
+          properties: {
+            resourceUri: { type: 'string' },
+            mimeType: { const: 'application/pdf', type: 'string' },
+            byteCount: { maximum: 6291456, type: 'integer' },
+            sha256: { type: 'string' },
+          },
+          type: 'object',
+        },
         truncation: {
           properties: {
             invoicePayments: { type: 'boolean' },

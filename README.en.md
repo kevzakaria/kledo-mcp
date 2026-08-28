@@ -145,6 +145,10 @@ For Sales and Purchase Invoices, `kledo_get` can also return the typed
 `QU -> SO -> DO -> INV` / `PQ -> PO -> PD -> PI` lineage and joined `IP` / `PP`
 events through that same tool. `purchase_quote` is available through
 `kledo_query` and `kledo_get` without adding another public tool.
+Sales Invoice also supports `include: ["print_document"]`: the PDF is bounded,
+validated, and returned once as an embedded resource while the `print_url`
+locator stays internal.
+
 ## Documentation
 
 | Guide | Contents |

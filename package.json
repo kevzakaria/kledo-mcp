@@ -43,12 +43,15 @@
     "LICENSE",
     "NOTICE",
     "SECURITY.md",
+    "mcp-inspector.json",
     "server.json",
     "scripts/setup.sh"
   ],
   "scripts": {
     "build": "tsc -p tsconfig.build.json",
     "config:check": "node --env-file=.env dist/bin/check-config.js",
+    "debug:mcp": "npm run build && mcp-inspector --config mcp-inspector.json",
+    "debug:mcp:check": "npm run build && mcp-inspector --cli --config mcp-inspector.json --server kledo-fixture --method tools/list --strict --format json",
     "pretest": "npm run build",
     "prepack": "npm run build",
     "setup": "bash scripts/setup.sh",
@@ -61,6 +64,7 @@
     "test:trace:orders": "NODE_OPTIONS=--disable-warning=ExperimentalWarning KLEDO_TEST_TRACE=1 vitest run test/mcp/report-sales-order-kpi.test.ts -t \"sums every page-level\" --reporter=default --disableConsoleIntercept --no-color",
     "test:trace:lineage": "NODE_OPTIONS=--disable-warning=ExperimentalWarning KLEDO_TEST_TRACE=1 vitest run test/mcp/get-sales-invoice-lineage.test.ts --reporter=default --disableConsoleIntercept --no-color",
     "test:trace:purchase-lineage": "NODE_OPTIONS=--disable-warning=ExperimentalWarning KLEDO_TEST_TRACE=1 vitest run test/mcp/get-purchase-invoice-lineage.test.ts --reporter=default --disableConsoleIntercept --no-color",
+    "test:trace:print-document": "NODE_OPTIONS=--disable-warning=ExperimentalWarning KLEDO_TEST_TRACE=1 vitest run test/mcp/get-sales-invoice-print-document.test.ts -t \"retrieves a bounded PDF\" --reporter=default --disableConsoleIntercept --no-color",
     "test:ui-parity": "NODE_OPTIONS=--disable-warning=ExperimentalWarning KLEDO_TEST_TRACE=1 vitest run test/debug/ui-parity-query.test.ts --reporter=default --disableConsoleIntercept --no-color",
     "test:wizard": "node test/setup-wizard.mjs",
     "test:watch": "vitest",
@@ -73,6 +77,7 @@
   },
   "devDependencies": {
     "@modelcontextprotocol/client": "2.0.0",
+    "@modelcontextprotocol/inspector": "2.4.0",
     "@types/node": "22.20.1",
     "typescript": "6.0.3",
     "vitest": "4.1.11"

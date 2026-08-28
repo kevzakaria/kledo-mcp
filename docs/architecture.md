@@ -71,6 +71,13 @@ multi-mebibyte result, the text mirror becomes a compact structural summary
 while the complete bounded payload remains in `structuredContent`. A result
 that cannot fit the MCP frame fails safely.
 
+Sales Invoice PDF retrieval is the exception to JSON-only payloads: safe
+metadata remains in `structuredContent`, while the base64 PDF appears exactly
+once as an embedded MCP resource. The opaque upstream locator never leaves the
+HTTP adapter; the validated resource bytes cross the gateway boundary through a
+non-enumerable internal attachment. The actual JSON-RPC request ID and resource
+bytes are included in the final frame budget calculation.
+
 ## Data representation
 
 - Kledo IDs are decimal strings.
@@ -127,18 +134,18 @@ entry is resolved from Kledo's `/users` endpoint before the native report is
 called with `sales_id`.
 
 After SQLite opt-in, the explicit `npm run warmup` adapter invokes the same
-internal refresh path before the first MCP query. It validates every allowlisted master source,
-walks paginated catalogs, derives contact-role snapshots from `type_ids`,
-flattens the product-category tree, and atomically replaces every sanitized
-tenant snapshot. It returns only counts and a timestamp. Warm-up is a local CLI
-operation, not a fourth public MCP tool.
+internal refresh path before the first MCP query. It validates every
+allowlisted master source, walks paginated catalogs, derives contact-role
+snapshots from `type_ids`, flattens the product-category tree, and atomically
+replaces every sanitized tenant snapshot. It returns only counts and a
+timestamp. Warm-up is a local CLI operation, not a fourth public MCP tool.
 
 Persisted rows are scoped by a one-way digest of the configured API origin and
-bearer token. The stored payload is limited to entity type, external ID, display and
-normalized names, active state, and timestamps. Tokens, email addresses, raw
-responses, and accounting transactions are excluded. When persistence is
-enabled, SQLite failures never select an identity from another scope: the
-gateway resolves from Kledo and returns a sanitized warning.
+bearer token. The stored payload is limited to entity type, external ID,
+display and normalized names, active state, and timestamps. Tokens, email
+addresses, raw responses, and accounting transactions are excluded. When
+persistence is enabled, SQLite failures never select an identity from another
+scope: the gateway resolves from Kledo and returns a sanitized warning.
 
 ## Safe failure behavior
 
@@ -155,6 +162,10 @@ host.
 The HTTP gateway uses bounded response sizes, request timeouts, limited retry
 attempts, capped retry waits, and FIFO concurrency control. It follows only the
 configured HTTPS origin and rejects unsafe redirects.
+
+Printable Sales Invoice PDFs use a separate 30-second generation timeout and a
+4 MiB standard byte cap. MIME type, magic bytes, and final frame size must all
+pass before any resource is returned.
 
 Financial statements use Kledo's native report endpoints. The server does not
 present a partial first page of transactions as an authoritative total.

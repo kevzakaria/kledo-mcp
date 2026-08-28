@@ -147,7 +147,9 @@ scan accounting transactions to infer reference data.
 `KLEDO_DEBUG=1` emits event names such as `identity.sqlite.hit` and
 `report.sales_by_person.request`, plus the historical and recent
 `report.dormant_customers.*.request` phases and the customer-total/invoice-detail
-`report.receivable_by_invoice.*.request` phases, plus `report.sales_order_kpi.orders.request`, to stderr. Diagnostics exclude
+`report.receivable_by_invoice.*.request` phases, plus
+`report.sales_order_kpi.orders.request` and
+`get.sales_invoice.print_document.request`, to stderr. Diagnostics exclude
 credentials, names, IDs, URLs, request arguments, raw responses, and transaction
 data. Leave debug mode disabled during ordinary use.
 

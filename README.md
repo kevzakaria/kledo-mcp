@@ -133,6 +133,10 @@ lineage bertipe `QU -> SO -> DO -> INV` / `PQ -> PO -> PD -> PI` serta event
 `IP` / `PP` yang sudah dicocokkan dari sumber relasi dan transaksi Kledo,
 tetap melalui tool yang sama. `purchase_quote` juga tersedia lewat
 `kledo_query` dan `kledo_get` tanpa menambah tool publik baru.
+Sales Invoice juga mendukung `include: ["print_document"]`: PDF dibatasi,
+divalidasi, dan dikembalikan satu kali sebagai embedded resource, sementara
+locator `print_url` tetap internal.
+
 ## Versi MCP yang dipakai
 
 Repo ini mengikuti revisi protokol MCP current,

@@ -1,0 +1,22 @@
+{
+  "mcpServers": {
+    "kledo-fixture": {
+      "type": "stdio",
+      "command": "node",
+      "args": ["dist/bin/debug-fixture.js"],
+      "cwd": ".",
+      "env": {
+        "NODE_OPTIONS": "--disable-warning=ExperimentalWarning"
+      }
+    },
+    "kledo-live": {
+      "type": "stdio",
+      "command": "node",
+      "args": ["--env-file=.env", "dist/bin/stdio.js"],
+      "cwd": ".",
+      "env": {
+        "KLEDO_DEBUG": "1"
+      }
+    }
+  }
+}

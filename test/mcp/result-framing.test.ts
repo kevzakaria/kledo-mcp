@@ -9,7 +9,11 @@ import {
 import { serveStdio } from '@modelcontextprotocol/server/stdio'
 import { afterEach, describe, expect, it } from 'vitest'
 
-import type { KledoGateway } from '../../src/kledo/gateway.js'
+import {
+  KLEDO_DOCUMENT_RESOURCE,
+  type KledoGateway,
+  type KledoGetResult,
+} from '../../src/kledo/gateway.js'
 import { createKledoMcpServer } from '../../src/server/create-server.js'
 import { KLEDO_STDIO_MAX_INPUT_BYTES } from '../../src/server/stdio-transport.js'
 
@@ -289,6 +293,91 @@ describe('MCP result framing', () => {
     )
     expect(result.isError).toBe(true)
     expect(JSON.stringify(rawResponse)).not.toContain(privateMarker)
+    expect(Buffer.byteLength(`${JSON.stringify(rawResponse)}\n`, 'utf8')).toBeLessThan(
+      SDK_STDIO_FRAME_LIMIT_BYTES,
+    )
+  })
+
+  it('embeds a maximum-sized PDF once and still enforces the actual response frame', async () => {
+    const pdfBytes = Buffer.alloc(6 * 1024 * 1024, 0x61)
+    pdfBytes.write('%PDF-', 0, 'ascii')
+    const blob = pdfBytes.toString('base64')
+    const output: KledoGetResult = {
+      entity: 'sales_invoice',
+      record: { kind: 'sales_invoice', id: '500' },
+      printDocument: {
+        resourceUri: 'kledo://sales-invoice/500/print-document.pdf',
+        mimeType: 'application/pdf',
+        byteCount: pdfBytes.byteLength,
+        sha256: 'a'.repeat(64),
+      },
+      truncation: { lineItems: false },
+      meta: { fetchedAt: '2026-08-28T01:00:00.000Z', warnings: [] },
+    }
+    Object.defineProperty(output, KLEDO_DOCUMENT_RESOURCE, {
+      value: {
+        uri: 'kledo://sales-invoice/500/print-document.pdf',
+        mimeType: 'application/pdf',
+        blob,
+      },
+      enumerable: false,
+    })
+    const gateway: KledoGateway = {
+      async query() {
+        throw new Error('not used')
+      },
+      async get() {
+        return output
+      },
+      async report() {
+        throw new Error('not used')
+      },
+    }
+    const { client, clientTransport } = await connect(gateway)
+
+    const ordinaryResult = await client.callTool({
+      name: 'kledo_get',
+      arguments: { entity: 'sales_invoice', id: '500', include: ['print_document'] },
+    })
+
+    expect(ordinaryResult.isError).not.toBe(true)
+    expect(ordinaryResult.content).toContainEqual({
+      type: 'resource',
+      resource: {
+        uri: 'kledo://sales-invoice/500/print-document.pdf',
+        mimeType: 'application/pdf',
+        blob,
+      },
+    })
+    expect(JSON.stringify(ordinaryResult.structuredContent)).not.toContain(blob.slice(0, 128))
+    expect(Buffer.byteLength(JSON.stringify(ordinaryResult), 'utf8')).toBeLessThan(
+      SDK_STDIO_FRAME_LIMIT_BYTES,
+    )
+
+    const { result, rawResponse } = await callToolWithRequestId(
+      client,
+      clientTransport,
+      'r'.repeat(2 * 1024 * 1024),
+      {
+        name: 'kledo_get',
+        arguments: { entity: 'sales_invoice', id: '500', include: ['print_document'] },
+      },
+    )
+
+    expect(result).toMatchObject({
+      isError: true,
+      content: [
+        {
+          type: 'text',
+          text: JSON.stringify({
+            code: 'UPSTREAM_RESPONSE_TOO_LARGE',
+            message: 'Kledo result exceeded the MCP transport size limit',
+            retryable: false,
+          }),
+        },
+      ],
+    })
+    expect(JSON.stringify(rawResponse)).not.toContain(blob.slice(0, 128))
     expect(Buffer.byteLength(`${JSON.stringify(rawResponse)}\n`, 'utf8')).toBeLessThan(
       SDK_STDIO_FRAME_LIMIT_BYTES,
     )

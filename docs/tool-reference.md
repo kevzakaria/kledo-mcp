@@ -48,6 +48,15 @@ and non-IP child transaction types remain outside this include.
 backward-compatible compact view; new lifecycle-aware callers should use
 `document_lineage` and `payment_events`.
 
+For `sales_invoice`, `print_document` first reads the typed invoice detail, keeps
+Kledo's opaque `print_url` internal, and fetches only the allowlisted PDF route
+on the configured origin. The standard server limits this download to 4 MiB and
+30 seconds, rejects redirects, validates both `application/pdf` and `%PDF-`, and
+never writes a persistent file. `structuredContent.printDocument` contains only
+`resourceUri`, MIME type, byte count, and SHA-256. The base64 bytes occur once,
+as an embedded MCP resource. Other document types, print variants, and outbound
+email or messaging remain unsupported.
+
 ## `kledo_report`
 
 Runs one allowlisted native Kledo financial or operational report, or one
@@ -187,6 +196,7 @@ The MCP client chooses a tool. Users do not need to know Kledo endpoint names.
 | "List direct payment events and destination accounts for invoice ID 123." | `kledo_get` with `invoice_payments` |
 | "Trace invoice ID 123 back through its quote, order, delivery, and payments." | `kledo_get` with `document_lineage` and `payment_events` |
 | "Trace purchase invoice ID 456 back through its quote, order, delivery, and payment." | `kledo_get` with `document_lineage` and `payment_events` |
+| "Give me the printable PDF for Sales Invoice ID 123." | `kledo_get` with `print_document` |
 | "What is the aged receivable position as of today?" | `kledo_report` |
 | "Which customers owe us, which invoices, and what project is each invoice for?" | `kledo_report` with `receivable_by_invoice` |
 | "Compare sales this month with last month." | `kledo_report` |
@@ -222,6 +232,8 @@ Version `0.1.0` implements the complete catalog above:
   transaction source; unexpected type, parent, relation, account, or row shapes
   fail safely. The legacy bounded `invoice_payments` view remains available for
   Sales Invoice only;
+- Sales Invoice can opt into one bounded embedded PDF resource with safe
+  metadata; the opaque upstream print locator is never returned or logged;
 - `kledo_report` routes 12 native reports plus the `sales_order_kpi`,
   `dormant_customers`, `receivable_by_invoice`, and `item_price_analysis`
   semantic adapters;
