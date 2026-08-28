@@ -238,9 +238,10 @@ export const kledoGetInputSchema = z
           'invoice_payments',
           'document_lineage',
           'payment_events',
+          'print_document',
         ]),
       )
-      .max(5)
+      .max(6)
       .optional(),
     lineItemLimit: z.number().int().min(1).max(200).default(50),
     invoicePaymentLimit: z.number().int().min(1).max(200).default(50),
@@ -962,6 +963,18 @@ export const kledoGetOutputSchema = z
       .array(paymentEventOutputSchema)
       .describe(
         'Typed sales or purchase invoice payment events joined from document relations and compact transaction rows; not proof of final settlement.',
+      )
+      .optional(),
+    printDocument: z
+      .object({
+        resourceUri: z.string().regex(/^kledo:\/\/sales-invoice\/[1-9]\d{0,19}\/print-document\.pdf$/),
+        mimeType: z.literal('application/pdf'),
+        byteCount: z.number().int().positive().max(6 * 1024 * 1024),
+        sha256: z.string().regex(/^[a-f0-9]{64}$/),
+      })
+      .strict()
+      .describe(
+        'Metadata for the bounded Sales Invoice PDF returned once as an embedded MCP resource.',
       )
       .optional(),
     relations: z

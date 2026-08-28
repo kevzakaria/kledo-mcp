@@ -198,7 +198,7 @@ The live detail responses share a broad transaction model. The tables above map 
 | Stamp and queue | `is_stamped`, `stamp_serial_number`, `tran_duty_stamp`, `queue_number`, `queue_number_formatted` | Not part of the default document summary. |
 | Approval | `is_approveable`, `approval_status`, `approval_level`, `approval_log`, `approval_roles_on_level`, `approval_progress` | Expose a bounded approval summary, not raw role or audit payloads. |
 | Mutability flags | `is_editable`, `is_deletable`, `is_revertable`, `is_closeable`, `is_uncloseable`, `is_voidable`, `is_unvoidable`, `is_returnable`, `currency_editable`, `reason` | Read-only MCP may report lifecycle capability but must never turn it into a write operation. |
-| Print and communication | `print_url`, `print_tax_url`, `print_url_word`, `print_url_excel`, `print_url_label`, `print_url_delivery`, `print_url_recap`, `print_url_receipt`, `print_url_document_receipt`, `print_url_approval`, `already_send_sms`, `already_send_email`, `already_send_email_recap`, `already_send_whatsapp` | Exclude raw locators and communication state from default MCP output. A future PDF retrieval path must use an explicit bounded contract; never fetch or send implicitly. |
+| Print and communication | `print_url`, `print_tax_url`, `print_url_word`, `print_url_excel`, `print_url_label`, `print_url_delivery`, `print_url_recap`, `print_url_receipt`, `print_url_document_receipt`, `print_url_approval`, `already_send_sms`, `already_send_email`, `already_send_email_recap`, `already_send_whatsapp` | Exclude raw locators and communication state from default MCP output. PDF retrieval may only happen through the explicit bounded contract below; never fetch or send implicitly. |
 | Navigation and audit | `next`, `prev`, `log`, `attachment`, `attachment_details` | Exclude from default MCP output; use an explicit bounded contract if later required. |
 | Embedded cycle data | `items`, `transactions`, `relations`, `parent_tran`, `quote`, `order`, `purchase_quote`, `purchase_order`, `deliveries`, `dp_transactions`, `memo_payment_transactions`, `available_memos` | Parse with the typed lineage and payment rules in this document. |
 | Payment Connect | `payment_connect`, `payment_connect_public_urls` | Exclude from default output because public URLs and provider metadata are not required for analysis. |
@@ -218,6 +218,55 @@ The live detail responses share a broad transaction model. The tables above map 
 | Serial and configuration | `serial_numbers`, `modifiers`, `custom` | Expose only when explicitly requested and bounded. |
 | Pricing rules | `price_rule`, `price_rule_id`, `price_rule_reward`, `price_rule_reward_id` | Internal pricing provenance; not the same as the final line price. |
 | Local metadata | `local_id` | Never use as a tenant-stable Kledo identity. |
+
+## Print PDF retrieval seam
+
+This is an implemented, read-only `kledo_get` contract for Sales Invoice only.
+
+The Sales Invoice detail response exposes `print_url`, but the value is an opaque
+locator rather than a directly fetchable URL. The Web UI constructs a typed
+document download route:
+
+```text
+GET /finance/invoices/{invoice_id}/download/{opaque_print_locator}
+```
+
+A live Chrome plus MCP Inspector check on 2026-08-28 confirmed that the same
+Sales Invoice detail exposed a Web UI Print action and that this route returned
+`application/pdf`, a valid `%PDF-` signature, matching byte-count and SHA-256
+metadata, and a renderable one-page A4 PDF. The check used one bounded sample;
+the temporary PDF and render were deleted, and no locator, document ID, business
+field, or document content was retained.
+
+The behavior stays behind the existing `kledo_get` interface rather than adding
+a fourth tool. The opt-in shape is:
+
+```json
+{
+  "entity": "sales_invoice",
+  "id": "<kledo-id>",
+  "include": ["print_document"]
+}
+```
+
+The adapter does the following:
+
+1. fetches the typed document detail and keeps `print_url` internal;
+2. builds only an entity-allowlisted download route, beginning with the verified
+   Sales Invoice route;
+3. requires HTTPS and the configured Kledo origin, preserves authentication only on
+   that origin, and rejects unapproved redirects;
+4. enforces a dedicated 30-second timeout and a 4 MiB standard byte limit, then
+   validates both `application/pdf` and the `%PDF-` magic bytes;
+5. returns one embedded PDF resource plus safe `resourceUri`, MIME type, byte
+   count, and SHA-256 metadata; it never returns or logs the raw locator;
+6. fails explicitly when the PDF exceeds the MCP transport budget instead of
+   truncating or silently writing a persistent local file.
+
+`print_tax_url`, Word, Excel, label, receipt, approval, and communication actions
+remain out of scope until each route and its authorization semantics are verified
+individually. PDF retrieval is read-only; sending email, WhatsApp, or SMS remains a
+write operation and is not part of this MCP.
 
 ## Resolved MCP gap
 

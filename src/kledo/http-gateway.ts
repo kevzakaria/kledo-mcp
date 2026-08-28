@@ -1,4 +1,4 @@
-import { createHmac, timingSafeEqual } from 'node:crypto'
+import { createHash, createHmac, timingSafeEqual } from 'node:crypto'
 
 import { z } from 'zod'
 
@@ -25,7 +25,11 @@ import {
   transactionIncludeEntities,
 } from './entities.js'
 import { errorForHttpStatus, KledoError } from './errors.js'
-import type { KledoGateway } from './gateway.js'
+import {
+  KLEDO_DOCUMENT_RESOURCE,
+  type KledoGateway,
+  type KledoGetResult,
+} from './gateway.js'
 import {
   applyQueryOptions,
   projectFields,
@@ -34,7 +38,6 @@ import {
 } from './query-options.js'
 import type {
   KledoGetInput,
-  KledoGetOutput,
   KledoInvoicePayment,
   KledoPaymentEvent,
   KledoQueryInput,
@@ -115,6 +118,7 @@ const rawDocumentRelationSchema = z
 
 const rawSalesInvoiceDetailSchema = rawSalesInvoiceSchema.extend({
   trans_type_id: exactIdSchema.nullable().optional(),
+  print_url: z.string().trim().min(1).max(2048).nullable().optional(),
   items: z.array(rawSalesInvoiceLineItemSchema).default([]),
   relations: z.array(rawDocumentRelationSchema).default([]),
   parent_tran: z
@@ -601,6 +605,8 @@ export interface CreateKledoHttpGatewayOptions {
   timeoutMs?: number
   maxAttempts?: number
   maxResponseBytes?: number
+  maxPrintDocumentBytes?: number
+  printDocumentTimeoutMs?: number
   maxConcurrency?: number
   salespersonCacheTtlMs?: number
   salespersonCacheMaxUsers?: number
@@ -630,6 +636,7 @@ export interface KledoGatewayDiagnosticEvent {
     | 'identity.upstream.refresh'
     | 'get.sales_invoice.detail.request'
     | 'get.sales_invoice.payment_events.request'
+    | 'get.sales_invoice.print_document.request'
     | 'get.purchase_invoice.detail.request'
     | 'report.sales_by_person.request'
     | 'report.sales_order_kpi.orders.request'
@@ -1295,6 +1302,8 @@ export function createKledoHttpGateway(options: CreateKledoHttpGatewayOptions): 
   const timeoutMs = options.timeoutMs ?? 10_000
   const maxAttempts = options.maxAttempts ?? 3
   const maxResponseBytes = options.maxResponseBytes ?? 8 * 1024 * 1024
+  const maxPrintDocumentBytes = options.maxPrintDocumentBytes ?? 4 * 1024 * 1024
+  const printDocumentTimeoutMs = options.printDocumentTimeoutMs ?? 30_000
   const maxConcurrency = options.maxConcurrency ?? 4
   const salespersonCacheTtlMs = options.salespersonCacheTtlMs ?? 5 * 60 * 1_000
   const salespersonCacheMaxUsers = options.salespersonCacheMaxUsers ?? 1_000
@@ -1323,6 +1332,20 @@ export function createKledoHttpGateway(options: CreateKledoHttpGatewayOptions): 
   }
   if (!Number.isSafeInteger(maxResponseBytes) || maxResponseBytes < 1) {
     throw new Error('maxResponseBytes must be a positive safe integer')
+  }
+  if (
+    !Number.isSafeInteger(maxPrintDocumentBytes) ||
+    maxPrintDocumentBytes < 1 ||
+    maxPrintDocumentBytes > 6 * 1024 * 1024
+  ) {
+    throw new Error('maxPrintDocumentBytes must be a positive safe integer up to 6291456')
+  }
+  if (
+    !Number.isInteger(printDocumentTimeoutMs) ||
+    printDocumentTimeoutMs < 1 ||
+    printDocumentTimeoutMs > 60_000
+  ) {
+    throw new Error('printDocumentTimeoutMs must be an integer between 1 and 60000')
   }
   if (!Number.isInteger(maxConcurrency) || maxConcurrency < 1 || maxConcurrency > 64) {
     throw new Error('maxConcurrency must be an integer between 1 and 64')
@@ -1459,15 +1482,20 @@ export function createKledoHttpGateway(options: CreateKledoHttpGatewayOptions): 
     }
   }
 
-  const request = async (url: URL, signal?: AbortSignal): Promise<Response> => {
+  const request = async (
+    url: URL,
+    signal?: AbortSignal,
+    accept = 'application/json',
+    requestTimeoutMs = timeoutMs,
+  ): Promise<Response> => {
     for (let attempt = 1; attempt <= maxAttempts; attempt += 1) {
       if (signal?.aborted) cancelled()
       let response: Response
-      const timeoutSignal = AbortSignal.timeout(timeoutMs)
+      const timeoutSignal = AbortSignal.timeout(requestTimeoutMs)
       try {
         response = await fetch(url, {
           headers: {
-            accept: 'application/json',
+            accept,
             authorization: `Bearer ${token}`,
             'user-agent': 'kledo-mcp/0.1.0',
           },
@@ -1578,6 +1606,82 @@ export function createKledoHttpGateway(options: CreateKledoHttpGatewayOptions): 
     try {
       const response = await request(url, signal)
       return await readJson(response, signal)
+    } finally {
+      release()
+    }
+  }
+
+  const readPrintDocument = async (
+    response: Response,
+    signal?: AbortSignal,
+  ): Promise<Buffer> => {
+    const mediaType = response.headers.get('content-type')?.split(';', 1)[0]?.trim().toLowerCase()
+    if (mediaType !== 'application/pdf') {
+      await cancelResponseBody(response)
+      throw new KledoError('SCHEMA_MISMATCH', 'Kledo returned an invalid print document')
+    }
+
+    const contentLength = response.headers.get('content-length')
+    if (contentLength !== null && /^\d+$/.test(contentLength)) {
+      const declaredBytes = Number(contentLength)
+      if (Number.isSafeInteger(declaredBytes) && declaredBytes > maxPrintDocumentBytes) {
+        await cancelResponseBody(response)
+        responseTooLarge()
+      }
+    }
+    if (!response.body) {
+      throw new KledoError('SCHEMA_MISMATCH', 'Kledo returned an invalid print document')
+    }
+
+    const reader = response.body.getReader()
+    const chunks: Uint8Array[] = []
+    let receivedBytes = 0
+    const cancelReader = async (): Promise<void> => {
+      try {
+        await reader.cancel()
+      } catch {
+        // Preserve the original safe error when cancellation itself fails.
+      }
+    }
+
+    while (true) {
+      if (signal?.aborted) {
+        await cancelReader()
+        cancelled()
+      }
+      let result: ReadableStreamReadResult<Uint8Array>
+      try {
+        result = await reader.read()
+      } catch (error) {
+        await cancelReader()
+        if (signal?.aborted) cancelled()
+        const name = error instanceof Error ? error.name : ''
+        if (name === 'TimeoutError' || name === 'AbortError') {
+          throw new KledoError('UPSTREAM_TIMEOUT', 'Kledo request timed out', true)
+        }
+        throw new KledoError('UPSTREAM_REQUEST_FAILED', 'Could not read Kledo response', true)
+      }
+      if (result.done) break
+      receivedBytes += result.value.byteLength
+      if (receivedBytes > maxPrintDocumentBytes) {
+        await cancelReader()
+        responseTooLarge()
+      }
+      chunks.push(result.value)
+    }
+
+    const document = Buffer.concat(chunks, receivedBytes)
+    if (document.byteLength < 5 || document.subarray(0, 5).toString('ascii') !== '%PDF-') {
+      throw new KledoError('SCHEMA_MISMATCH', 'Kledo returned an invalid print document')
+    }
+    return document
+  }
+
+  const requestPrintDocument = async (url: URL, signal?: AbortSignal): Promise<Buffer> => {
+    const release = await acquirePermit(signal)
+    try {
+      const response = await request(url, signal, 'application/pdf', printDocumentTimeoutMs)
+      return await readPrintDocument(response, signal)
     } finally {
       release()
     }
@@ -2068,9 +2172,13 @@ export function createKledoHttpGateway(options: CreateKledoHttpGatewayOptions): 
       }
     },
 
-    async get(input: KledoGetInput, signal?: AbortSignal): Promise<KledoGetOutput> {
+    async get(input: KledoGetInput, signal?: AbortSignal): Promise<KledoGetResult> {
       validateFields(input.entity, input.fields)
       const includes = new Set(input.include ?? [])
+
+      if (includes.has('print_document') && input.entity !== 'sales_invoice') {
+        invalid(`${input.entity} does not support print_document`)
+      }
 
       if (input.entity === 'purchase_invoice') {
         if (includes.has('invoice_payments')) {
@@ -2301,7 +2409,36 @@ export function createKledoHttpGateway(options: CreateKledoHttpGatewayOptions): 
         }
       }
 
-      const output: KledoGetOutput = {
+      let printDocument: KledoGetResult['printDocument']
+      let printDocumentResource: KledoGetResult[typeof KLEDO_DOCUMENT_RESOURCE]
+      if (includes.has('print_document')) {
+        if (!invoice.print_url) {
+          throw new KledoError(
+            'UNSUPPORTED_OPERATION',
+            'This Sales Invoice does not provide a printable PDF',
+          )
+        }
+        const resourceUri = `kledo://sales-invoice/${input.id}/print-document.pdf`
+        const printUrl = new URL(
+          `finance/invoices/${input.id}/download/${encodeURIComponent(invoice.print_url)}`,
+          baseUrl,
+        )
+        emitDiagnostic('get.sales_invoice.print_document.request')
+        const document = await requestPrintDocument(printUrl, signal)
+        printDocument = {
+          resourceUri,
+          mimeType: 'application/pdf',
+          byteCount: document.byteLength,
+          sha256: createHash('sha256').update(document).digest('hex'),
+        }
+        printDocumentResource = {
+          uri: resourceUri,
+          mimeType: 'application/pdf',
+          blob: document.toString('base64'),
+        }
+      }
+
+      const output: KledoGetResult = {
         entity: input.entity,
         record: projectFields(input.entity, input.fields, normalizedSalesInvoice(invoice)),
         ...(includes.has('line_items') ? { lineItems } : {}),
@@ -2309,6 +2446,7 @@ export function createKledoHttpGateway(options: CreateKledoHttpGatewayOptions): 
         ...(includes.has('invoice_payments') ? { invoicePayments } : {}),
         ...(includes.has('document_lineage') ? { documentLineage } : {}),
         ...(includes.has('payment_events') ? { paymentEvents } : {}),
+        ...(printDocument ? { printDocument } : {}),
         truncation: {
           lineItems: includes.has('line_items') && omittedCount > 0,
           ...(includes.has('line_items') && omittedCount > 0 ? { omittedCount } : {}),
@@ -2330,6 +2468,12 @@ export function createKledoHttpGateway(options: CreateKledoHttpGatewayOptions): 
           ...(options.tenant ? { tenant: options.tenant } : {}),
           warnings: [],
         },
+      }
+      if (printDocumentResource) {
+        Object.defineProperty(output, KLEDO_DOCUMENT_RESOURCE, {
+          value: printDocumentResource,
+          enumerable: false,
+        })
       }
       return output
     },
