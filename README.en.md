@@ -32,6 +32,30 @@ only for credential setup; MCP Inspector is optional developer tooling.
 **Status:** `0.1.x` preview. I am intentionally keeping the interface small
 while response shapes and report behavior are verified.
 
+## Kledo MCP at a glance
+
+```mermaid
+flowchart LR
+    U["User<br/>Everyday business question"] --> A["Any MCP-capable<br/>AI client or agent"]
+
+    subgraph LOCAL["Local machine: one tenant per process"]
+        M["kledo-mcp<br/>Read-only semantic layer<br/>kledo_query / kledo_get / kledo_report"]
+        S[("Optional local SQLite<br/>sanitized identities only")]
+        M -.->|Optional identity cache| S
+    end
+
+    A -->|Structured tool call| M
+    M -->|Allowlisted HTTPS GET| K["Kledo API<br/>User-configured tenant"]
+    K -->|Business data| M
+    M -->|Normalized result<br/>provenance and freshness| A
+    A --> R["A directly understandable answer"]
+```
+
+Kledo MCP is a local, read-only layer that translates business intent into
+bounded Kledo requests and returns structured results to the AI client. Users
+can work with everyday names and visible Document Numbers; the MCP resolves
+Kledo's numeric IDs internally when needed.
+
 ## Current MCP architecture
 
 > [!NOTE]
@@ -118,7 +142,7 @@ optional `KLEDO_STATE_DIR` from its process environment.
 | Tool | Purpose |
 | --- | --- |
 | `kledo_query` | Search or page through an allowlisted Kledo entity |
-| `kledo_get` | Retrieve one normalized record and bounded relationships |
+| `kledo_get` | Retrieve one record by a user-visible Document Number or an ID from a previous MCP result |
 | `kledo_report` | Run an allowlisted native report or read-only semantic analysis |
 
 I do not expose tools that create or modify records, switch tenants during a
@@ -144,7 +168,10 @@ Later processes can route salesperson reports by ID without reloading `/users`
 while that snapshot is fresh; other kinds are ready for later semantic routing.
 After opt-in, run `npm run warmup` to prefetch them without adding another MCP
 tool.
-For Sales and Purchase Invoices, `kledo_get` can also return the typed
+For QU, SO, DO, INV, PQ, PO, PD, and PI, the user can supply the visible
+Document Number; `kledo_get` resolves one exact live match while hiding Kledo's
+numeric ID. Transactional Document Numbers are not persisted in SQLite. For
+Sales and Purchase Invoices, `kledo_get` can also return the typed
 `QU -> SO -> DO -> INV` / `PQ -> PO -> PD -> PI` lineage and joined `IP` / `PP`
 events through that same tool. `purchase_quote` is available through
 `kledo_query` and `kledo_get` without adding another public tool.

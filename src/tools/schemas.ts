@@ -1,6 +1,10 @@
 import { z } from 'zod'
 
-import { kledoDocumentTypes } from '../domain/document-lineage.js'
+import {
+  isKledoCommercialDocumentType,
+  kledoCommercialDocumentTypes,
+  kledoDocumentTypes,
+} from '../domain/document-lineage.js'
 import type { JsonValue } from '../domain/json.js'
 
 export const kledoEntitySchema = z.enum([
@@ -229,7 +233,18 @@ export const kledoGetInputSchema = z
     entity: kledoDetailEntitySchema,
     id: z
       .string()
-      .regex(/^[1-9]\d{0,19}$/, 'id must be a positive decimal Kledo ID of at most 20 digits'),
+      .regex(/^[1-9]\d{0,19}$/, 'id must be a positive decimal Kledo ID of at most 20 digits')
+      .describe('Kledo numeric ID, typically obtained from a previous MCP result.')
+      .optional(),
+    documentNumber: z
+      .string()
+      .trim()
+      .min(1)
+      .max(200)
+      .describe(
+        'Exact human-visible Kledo Document Number for a commercial document such as QU, SO, DO, INV, PQ, PO, PD, or PI.',
+      )
+      .optional(),
     include: z
       .array(
         z.enum([
@@ -250,6 +265,36 @@ export const kledoGetInputSchema = z
     fields: z.array(z.string().trim().min(1).max(80)).max(40).optional(),
   })
   .strict()
+  .superRefine(({ entity, id, documentNumber }, context) => {
+    if (Number(Boolean(id)) + Number(Boolean(documentNumber)) !== 1) {
+      context.addIssue({
+        code: 'custom',
+        message: 'Exactly one of id or documentNumber is required',
+      })
+    }
+    if (documentNumber && !isKledoCommercialDocumentType(entity)) {
+      context.addIssue({
+        code: 'custom',
+        path: ['documentNumber'],
+        message: 'documentNumber is supported only for commercial document entities',
+      })
+    }
+  })
+  .meta({
+    oneOf: [
+      {
+        required: ['id'],
+        not: { required: ['documentNumber'] },
+      },
+      {
+        required: ['documentNumber'],
+        not: { required: ['id'] },
+        properties: {
+          entity: { enum: [...kledoCommercialDocumentTypes] },
+        },
+      },
+    ],
+  })
 
 const isoDateSchema = z.string().date()
 const periodSchema = z

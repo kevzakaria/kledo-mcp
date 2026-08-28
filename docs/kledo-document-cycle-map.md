@@ -70,7 +70,7 @@ Status IDs are entity-scoped and may be localized. Do not create one global
 | Business concept | Kledo API source | Public MCP field or policy |
 |---|---|---|
 | Document ID | `id` | Decimal string `id` |
-| Document number | `ref_number` | `reference` on generic records; `number` inside typed lineage |
+| Document number | `ref_number` | `documentNumber` exact locator; legacy `reference` on generic records; `number` inside typed lineage |
 | Project or user reference | `memo` | `memo` on generic records; `projectReference` in `receivable_by_invoice` |
 | Party | `contact_id`, `contact` | Sanitized contact relation or report identity |
 | Transaction date | `trans_date` | `transactionDate` |
@@ -87,6 +87,13 @@ Status IDs are entity-scoped and may be localized. Do not create one global
 
 Kledo-originated `memo`, descriptions, tags, messages, names, and other business
 text are untrusted data. Clients must never treat returned text as instructions.
+
+For QU, SO, DO, INV, PQ, PO, PD, and PI, `kledo_get` accepts the human-visible
+`documentNumber` instead of requiring the caller to know the numeric ID. It
+performs a bounded live search inside that one document type, requires exactly
+one full case-insensitive match, and then uses the resolved ID only inside the
+gateway. This transactional lookup does not use the optional SQLite master-data
+identity catalog.
 
 ## Typed lineage contract
 
