@@ -15,6 +15,7 @@ const transactions = new Set<KledoEntity>([
   'sales_delivery',
   'purchase_delivery',
   'sales_quote',
+  'purchase_quote',
   'bank_transaction',
   'expense',
 ])
@@ -26,6 +27,7 @@ const partyTransactions = new Set<KledoEntity>([
   'sales_delivery',
   'purchase_delivery',
   'sales_quote',
+  'purchase_quote',
   'expense',
 ])
 const productTransactions = new Set<KledoEntity>(partyTransactions)
@@ -36,6 +38,7 @@ const warehouseTransactions = new Set<KledoEntity>([
   'sales_delivery',
   'purchase_delivery',
   'sales_quote',
+  'purchase_quote',
 ])
 const salesTransactions = new Set<KledoEntity>(['sales_order', 'sales_delivery', 'sales_quote'])
 const dueDateTransactions = new Set<KledoEntity>([
@@ -43,6 +46,7 @@ const dueDateTransactions = new Set<KledoEntity>([
   'purchase_invoice',
   'sales_order',
   'purchase_order',
+  'purchase_quote',
 ])
 const shippingDateTransactions = new Set<KledoEntity>([
   'sales_invoice',
@@ -65,6 +69,7 @@ const amountTransactions = new Set<KledoEntity>([
   'purchase_order',
   'sales_delivery',
   'sales_quote',
+  'purchase_quote',
   'bank_transaction',
   'expense',
 ])
@@ -94,6 +99,7 @@ const projectedFields: Record<KledoEntity, Set<string>> = {
   sales_delivery: new Set(commonDocumentFields),
   purchase_delivery: new Set(commonDocumentFields),
   sales_quote: new Set(commonDocumentFields),
+  purchase_quote: new Set(commonDocumentFields),
   bank_transaction: new Set(commonDocumentFields),
   expense: new Set(commonDocumentFields),
   contact: new Set(['displayName', 'companyName', 'personName', 'groupId', 'typeIds', 'archived']),
@@ -129,6 +135,7 @@ const sortFields: Record<KledoEntity, Record<string, string>> = {
   sales_delivery: commonTransactionSort,
   purchase_delivery: commonTransactionSort,
   sales_quote: commonTransactionSort,
+  purchase_quote: commonTransactionSort,
   bank_transaction: {
     transactionDate: 'trans_date',
     memo: 'memo',

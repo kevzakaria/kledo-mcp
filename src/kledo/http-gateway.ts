@@ -3,6 +3,12 @@ import { createHmac, timingSafeEqual } from 'node:crypto'
 import { z } from 'zod'
 
 import { addDecimals, compareDecimals, decimalString } from '../domain/decimal.js'
+import {
+  documentLifecycleRank,
+  documentTypeForTransactionTypeId,
+  transactionTypeIdByDocumentType,
+  type KledoDocumentType,
+} from '../domain/document-lineage.js'
 import type { JsonValue } from '../domain/json.js'
 import {
   createSqliteTenantIdentityCatalog,
@@ -30,6 +36,7 @@ import type {
   KledoGetInput,
   KledoGetOutput,
   KledoInvoicePayment,
+  KledoPaymentEvent,
   KledoQueryInput,
   KledoQueryOutput,
   KledoReportInput,
@@ -39,6 +46,7 @@ import {
   invoicePaymentOutputSchema,
   jsonValueSchema,
   kledoReportOutputSchema,
+  paymentEventOutputSchema,
 } from '../tools/schemas.js'
 
 const rawContactSchema = z
@@ -94,8 +102,38 @@ const rawSalesInvoiceLineItemSchema = z
   })
   .passthrough()
 
+const rawDocumentRelationSchema = z
+  .object({
+    id: exactIdSchema.refine((value) => /^[1-9]\d{0,19}$/.test(String(value))),
+    ref_number: z.string().trim().min(1),
+    trans_type_id: exactIdSchema.refine((value) => /^[1-9]\d{0,19}$/.test(String(value))),
+    trans_date: z.string().date().nullable().optional(),
+    business_tran_id: exactIdSchema.nullable().optional(),
+    amount_after_tax: decimalSchema.nullable().optional(),
+  })
+  .passthrough()
+
 const rawSalesInvoiceDetailSchema = rawSalesInvoiceSchema.extend({
+  trans_type_id: exactIdSchema.nullable().optional(),
   items: z.array(rawSalesInvoiceLineItemSchema).default([]),
+  relations: z.array(rawDocumentRelationSchema).default([]),
+  parent_tran: z
+    .object({
+      id: exactIdSchema,
+      ref_number: z.string(),
+      trans_type_id: exactIdSchema.nullable().optional(),
+      trans_date: z.string().nullable().optional(),
+    })
+    .passthrough()
+    .nullable()
+    .optional(),
+})
+
+const rawPurchaseInvoiceDetailSchema = rawSalesInvoiceSchema.extend({
+  trans_type_id: exactIdSchema.nullable().optional(),
+  items: z.array(z.unknown()).default([]),
+  relations: z.array(rawDocumentRelationSchema).default([]),
+  transactions: z.array(z.unknown()).default([]),
   parent_tran: z
     .object({
       id: exactIdSchema,
@@ -166,6 +204,11 @@ const rawEntityDetailEnvelopeSchema = z.object({
 const rawSalesInvoiceDetailEnvelopeSchema = z.object({
   success: z.literal(true),
   data: rawSalesInvoiceDetailSchema,
+})
+
+const rawPurchaseInvoiceDetailEnvelopeSchema = z.object({
+  success: z.literal(true),
+  data: rawPurchaseInvoiceDetailSchema,
 })
 
 const rawInvoicePaymentsEnvelopeSchema = z.object({
@@ -585,6 +628,9 @@ export interface KledoGatewayDiagnosticEvent {
     | 'identity.sqlite.write'
     | 'identity.sqlite.write_failed'
     | 'identity.upstream.refresh'
+    | 'get.sales_invoice.detail.request'
+    | 'get.sales_invoice.payment_events.request'
+    | 'get.purchase_invoice.detail.request'
     | 'report.sales_by_person.request'
     | 'report.sales_order_kpi.orders.request'
     | 'report.dormant_customers.historical.request'
@@ -666,15 +712,16 @@ function normalizedSalesInvoice(invoice: z.infer<typeof rawSalesInvoiceSchema>):
   }
 }
 
-function normalizedInvoicePayments(
+function normalizedPaymentTransactions(
   invoiceId: string,
   rawTransactions: unknown[],
+  paymentTransactionTypeId: string,
 ): KledoInvoicePayment[] {
   const paymentsById = new Map<string, KledoInvoicePayment>()
 
   for (const rawTransaction of rawTransactions) {
     const discriminator = rawInvoiceTransactionDiscriminatorSchema.parse(rawTransaction)
-    if (String(discriminator.trans_type_id) !== '17') continue
+    if (String(discriminator.trans_type_id) !== paymentTransactionTypeId) continue
     const payment = rawInvoicePaymentSchema.parse(rawTransaction)
     if (String(payment.business_tran_id) !== invoiceId) {
       throw new KledoError(
@@ -738,6 +785,360 @@ function normalizedInvoicePayments(
     const byIdLength = left.id.length - right.id.length
     return byIdLength !== 0 ? byIdLength : left.id.localeCompare(right.id)
   })
+}
+
+function normalizedInvoicePayments(
+  invoiceId: string,
+  rawTransactions: unknown[],
+): KledoInvoicePayment[] {
+  return normalizedPaymentTransactions(
+    invoiceId,
+    rawTransactions,
+    transactionTypeIdByDocumentType.invoice_payment,
+  )
+}
+
+type SalesInvoicePredecessorType = 'sales_quote' | 'sales_order' | 'sales_delivery'
+type PurchaseInvoicePredecessorType =
+  | 'purchase_quote'
+  | 'purchase_order'
+  | 'purchase_delivery'
+
+const salesInvoicePredecessorTypes = new Set<SalesInvoicePredecessorType>([
+  'sales_quote',
+  'sales_order',
+  'sales_delivery',
+])
+
+const purchaseInvoicePredecessorTypes = new Set<PurchaseInvoicePredecessorType>([
+  'purchase_quote',
+  'purchase_order',
+  'purchase_delivery',
+])
+
+function isSalesInvoicePredecessorType(
+  documentType: KledoDocumentType | undefined,
+): documentType is SalesInvoicePredecessorType {
+  return (
+    documentType !== undefined &&
+    salesInvoicePredecessorTypes.has(documentType as SalesInvoicePredecessorType)
+  )
+}
+
+function isPurchaseInvoicePredecessorType(
+  documentType: KledoDocumentType | undefined,
+): documentType is PurchaseInvoicePredecessorType {
+  return (
+    documentType !== undefined &&
+    purchaseInvoicePredecessorTypes.has(documentType as PurchaseInvoicePredecessorType)
+  )
+}
+
+type SalesInvoiceDetail = z.infer<typeof rawSalesInvoiceDetailSchema>
+type PurchaseInvoiceDetail = z.infer<typeof rawPurchaseInvoiceDetailSchema>
+type RawDocumentRelation = z.infer<typeof rawDocumentRelationSchema>
+
+function normalizedSalesInvoiceLineage(invoice: SalesInvoiceDetail, lineageLimit: number) {
+  if (
+    invoice.trans_type_id !== null &&
+    invoice.trans_type_id !== undefined &&
+    String(invoice.trans_type_id) !== transactionTypeIdByDocumentType.sales_invoice
+  ) {
+    throw new KledoError(
+      'SCHEMA_MISMATCH',
+      'Kledo returned a non-invoice document from the Sales Invoice endpoint',
+    )
+  }
+
+  const predecessorsByKey = new Map<
+    string,
+    {
+      documentType: KledoDocumentType
+      transactionTypeId: string
+      id: string
+      number: string
+    }
+  >()
+  for (const relation of invoice.relations) {
+    const transactionTypeId = String(relation.trans_type_id)
+    const documentType = documentTypeForTransactionTypeId(transactionTypeId)
+    if (!documentType) {
+      throw new KledoError(
+        'SCHEMA_MISMATCH',
+        'Kledo returned an unknown transaction type in Sales Invoice lineage',
+      )
+    }
+    if (documentType === 'invoice_payment') continue
+    if (!isSalesInvoicePredecessorType(documentType)) {
+      throw new KledoError(
+        'SCHEMA_MISMATCH',
+        'Kledo returned an unsupported document type in Sales Invoice lineage',
+      )
+    }
+
+    const normalized = {
+      documentType,
+      transactionTypeId,
+      id: String(relation.id),
+      number: relation.ref_number,
+    }
+    const key = `${transactionTypeId}:${normalized.id}`
+    const existing = predecessorsByKey.get(key)
+    if (existing && existing.number !== normalized.number) {
+      throw new KledoError(
+        'SCHEMA_MISMATCH',
+        'Kledo returned conflicting duplicate documents in Sales Invoice lineage',
+      )
+    }
+    predecessorsByKey.set(key, normalized)
+  }
+
+  const predecessors = [...predecessorsByKey.values()].sort((left, right) => {
+    const byLifecycle =
+      documentLifecycleRank(left.documentType) - documentLifecycleRank(right.documentType)
+    if (byLifecycle !== 0) return byLifecycle
+    const byIdLength = left.id.length - right.id.length
+    return byIdLength !== 0 ? byIdLength : left.id.localeCompare(right.id)
+  })
+
+  let immediateParent: (typeof predecessors)[number] | null = null
+  if (invoice.parent_tran) {
+    if (
+      invoice.parent_tran.trans_type_id === null ||
+      invoice.parent_tran.trans_type_id === undefined
+    ) {
+      throw new KledoError(
+        'SCHEMA_MISMATCH',
+        'Kledo returned an untyped immediate parent for the Sales Invoice',
+      )
+    }
+    const transactionTypeId = String(invoice.parent_tran.trans_type_id)
+    const documentType = documentTypeForTransactionTypeId(transactionTypeId)
+    const parentId = String(invoice.parent_tran.id)
+    if (!isSalesInvoicePredecessorType(documentType)) {
+      throw new KledoError(
+        'SCHEMA_MISMATCH',
+        'Kledo returned an invalid immediate parent for the Sales Invoice',
+      )
+    }
+    immediateParent = predecessorsByKey.get(`${transactionTypeId}:${parentId}`) ?? null
+    if (!immediateParent || immediateParent.number !== invoice.parent_tran.ref_number) {
+      throw new KledoError(
+        'SCHEMA_MISMATCH',
+        'Kledo returned an immediate parent missing from Sales Invoice lineage',
+      )
+    }
+  }
+
+  const selectedPredecessors = predecessors.slice(0, lineageLimit)
+  return {
+    documentLineage: {
+      anchor: {
+        documentType: 'sales_invoice' as const,
+        transactionTypeId: transactionTypeIdByDocumentType.sales_invoice,
+        id: String(invoice.id),
+        number: invoice.ref_number,
+      },
+      immediateParent,
+      predecessors: selectedPredecessors,
+      complete: selectedPredecessors.length === predecessors.length,
+    },
+    omittedLineageDocumentCount: predecessors.length - selectedPredecessors.length,
+  }
+}
+
+function normalizedPurchaseInvoiceLineage(
+  invoice: PurchaseInvoiceDetail,
+  lineageLimit: number,
+) {
+  if (
+    invoice.trans_type_id !== null &&
+    invoice.trans_type_id !== undefined &&
+    String(invoice.trans_type_id) !== transactionTypeIdByDocumentType.purchase_invoice
+  ) {
+    throw new KledoError(
+      'SCHEMA_MISMATCH',
+      'Kledo returned a non-invoice document from the Purchase Invoice endpoint',
+    )
+  }
+
+  const predecessorsByKey = new Map<
+    string,
+    {
+      documentType: PurchaseInvoicePredecessorType
+      transactionTypeId: string
+      id: string
+      number: string
+    }
+  >()
+  for (const relation of invoice.relations) {
+    const transactionTypeId = String(relation.trans_type_id)
+    const documentType = documentTypeForTransactionTypeId(transactionTypeId)
+    if (!documentType) {
+      throw new KledoError(
+        'SCHEMA_MISMATCH',
+        'Kledo returned an unknown transaction type in Purchase Invoice lineage',
+      )
+    }
+    if (documentType === 'purchase_payment') continue
+    if (!isPurchaseInvoicePredecessorType(documentType)) {
+      throw new KledoError(
+        'SCHEMA_MISMATCH',
+        'Kledo returned an unsupported document type in Purchase Invoice lineage',
+      )
+    }
+
+    const normalized = {
+      documentType,
+      transactionTypeId,
+      id: String(relation.id),
+      number: relation.ref_number,
+    }
+    const key = `${transactionTypeId}:${normalized.id}`
+    const existing = predecessorsByKey.get(key)
+    if (existing && existing.number !== normalized.number) {
+      throw new KledoError(
+        'SCHEMA_MISMATCH',
+        'Kledo returned conflicting duplicate documents in Purchase Invoice lineage',
+      )
+    }
+    predecessorsByKey.set(key, normalized)
+  }
+
+  const predecessors = [...predecessorsByKey.values()].sort((left, right) => {
+    const byLifecycle =
+      documentLifecycleRank(left.documentType) - documentLifecycleRank(right.documentType)
+    if (byLifecycle !== 0) return byLifecycle
+    const byIdLength = left.id.length - right.id.length
+    return byIdLength !== 0 ? byIdLength : left.id.localeCompare(right.id)
+  })
+
+  let immediateParent: (typeof predecessors)[number] | null = null
+  if (invoice.parent_tran) {
+    if (
+      invoice.parent_tran.trans_type_id === null ||
+      invoice.parent_tran.trans_type_id === undefined
+    ) {
+      throw new KledoError(
+        'SCHEMA_MISMATCH',
+        'Kledo returned an untyped immediate parent for the Purchase Invoice',
+      )
+    }
+    const transactionTypeId = String(invoice.parent_tran.trans_type_id)
+    const documentType = documentTypeForTransactionTypeId(transactionTypeId)
+    const parentId = String(invoice.parent_tran.id)
+    if (!isPurchaseInvoicePredecessorType(documentType)) {
+      throw new KledoError(
+        'SCHEMA_MISMATCH',
+        'Kledo returned an invalid immediate parent for the Purchase Invoice',
+      )
+    }
+    immediateParent = predecessorsByKey.get(`${transactionTypeId}:${parentId}`) ?? null
+    if (!immediateParent || immediateParent.number !== invoice.parent_tran.ref_number) {
+      throw new KledoError(
+        'SCHEMA_MISMATCH',
+        'Kledo returned an immediate parent missing from Purchase Invoice lineage',
+      )
+    }
+  }
+
+  const selectedPredecessors = predecessors.slice(0, lineageLimit)
+  return {
+    documentLineage: {
+      anchor: {
+        documentType: 'purchase_invoice' as const,
+        transactionTypeId: transactionTypeIdByDocumentType.purchase_invoice,
+        id: String(invoice.id),
+        number: invoice.ref_number,
+      },
+      immediateParent,
+      predecessors: selectedPredecessors,
+      complete: selectedPredecessors.length === predecessors.length,
+    },
+    omittedLineageDocumentCount: predecessors.length - selectedPredecessors.length,
+  }
+}
+
+function normalizedPaymentEvents(
+  invoiceId: string,
+  rawTransactions: unknown[],
+  relations: readonly RawDocumentRelation[],
+  paymentDocumentType: 'invoice_payment' | 'purchase_payment' = 'invoice_payment',
+): KledoPaymentEvent[] {
+  const paymentTransactionTypeId = transactionTypeIdByDocumentType[paymentDocumentType]
+  const paymentEventLabel =
+    paymentDocumentType === 'invoice_payment' ? 'Invoice Payment' : 'Purchase Payment'
+  const invoicePayments = normalizedPaymentTransactions(
+    invoiceId,
+    rawTransactions,
+    paymentTransactionTypeId,
+  )
+  const paymentRelations = new Map<string, RawDocumentRelation>()
+  for (const relation of relations) {
+    if (String(relation.trans_type_id) !== paymentTransactionTypeId) {
+      continue
+    }
+    const id = String(relation.id)
+    const existing = paymentRelations.get(id)
+    if (
+      existing &&
+      (existing.ref_number !== relation.ref_number ||
+        existing.trans_date !== relation.trans_date ||
+        (existing.amount_after_tax !== null &&
+          existing.amount_after_tax !== undefined &&
+          relation.amount_after_tax !== null &&
+          relation.amount_after_tax !== undefined &&
+          compareDecimals(
+            decimalString(existing.amount_after_tax),
+            decimalString(relation.amount_after_tax),
+          ) !== 0))
+    ) {
+      throw new KledoError(
+        'SCHEMA_MISMATCH',
+        `Kledo returned conflicting duplicate ${paymentEventLabel} relations`,
+      )
+    }
+    paymentRelations.set(id, relation)
+  }
+
+  const events = invoicePayments.map((payment) => {
+    const relation = paymentRelations.get(payment.id)
+    if (!relation) {
+      throw new KledoError(
+        'SCHEMA_MISMATCH',
+        `Kledo returned a ${paymentEventLabel} transaction without a typed relation`,
+      )
+    }
+    if (
+      (relation.trans_date !== null &&
+        relation.trans_date !== undefined &&
+        relation.trans_date !== payment.transactionDate) ||
+      (relation.amount_after_tax !== null &&
+        relation.amount_after_tax !== undefined &&
+        compareDecimals(decimalString(relation.amount_after_tax), payment.amount.amount) !== 0)
+    ) {
+      throw new KledoError(
+        'SCHEMA_MISMATCH',
+        `Kledo returned inconsistent ${paymentEventLabel} relation data`,
+      )
+    }
+
+    return paymentEventOutputSchema.parse({
+      ...payment,
+      relation: 'payment_for',
+      documentType: paymentDocumentType,
+      transactionTypeId: paymentTransactionTypeId,
+      number: relation.ref_number,
+    })
+  })
+
+  if (events.length !== paymentRelations.size) {
+    throw new KledoError(
+      'SCHEMA_MISMATCH',
+      `Kledo returned a ${paymentEventLabel} relation without a matching transaction`,
+    )
+  }
+  return events
 }
 
 function queryCursorRequest(input: KledoQueryInput): object {
@@ -1669,11 +2070,112 @@ export function createKledoHttpGateway(options: CreateKledoHttpGatewayOptions): 
 
     async get(input: KledoGetInput, signal?: AbortSignal): Promise<KledoGetOutput> {
       validateFields(input.entity, input.fields)
+      const includes = new Set(input.include ?? [])
+
+      if (input.entity === 'purchase_invoice') {
+        if (includes.has('invoice_payments')) {
+          invalid('purchase_invoice does not support invoice_payments')
+        }
+
+        const url = new URL(`finance/purchaseInvoices/${input.id}`, baseUrl)
+        emitDiagnostic('get.purchase_invoice.detail.request')
+        const body = await requestJson(url, signal)
+        const envelope = rawPurchaseInvoiceDetailEnvelopeSchema.parse(body)
+        const invoice = envelope.data
+        const extras = normalizeTransactionExtras(input.entity, invoice)
+        const selectedItems = extras.lineItems.slice(0, input.lineItemLimit)
+        const omittedCount = extras.lineItems.length - selectedItems.length
+
+        let parentEntity: PurchaseInvoicePredecessorType = 'purchase_order'
+        if (
+          invoice.parent_tran?.trans_type_id !== null &&
+          invoice.parent_tran?.trans_type_id !== undefined
+        ) {
+          const typedParentEntity = documentTypeForTransactionTypeId(
+            String(invoice.parent_tran.trans_type_id),
+          )
+          if (!isPurchaseInvoicePredecessorType(typedParentEntity)) {
+            throw new KledoError(
+              'SCHEMA_MISMATCH',
+              'Kledo returned an invalid immediate parent for the Purchase Invoice',
+            )
+          }
+          parentEntity = typedParentEntity
+        }
+        const relations = invoice.parent_tran
+          ? [
+              {
+                relation: 'derived_from',
+                entity: parentEntity,
+                id: String(invoice.parent_tran.id),
+              },
+            ]
+          : []
+
+        let documentLineage:
+          | ReturnType<typeof normalizedPurchaseInvoiceLineage>['documentLineage']
+          | undefined
+        let omittedLineageDocumentCount = 0
+        if (includes.has('document_lineage')) {
+          const normalized = normalizedPurchaseInvoiceLineage(invoice, input.lineageLimit)
+          documentLineage = normalized.documentLineage
+          omittedLineageDocumentCount = normalized.omittedLineageDocumentCount
+        }
+
+        let paymentEvents: KledoPaymentEvent[] = []
+        let omittedPaymentEventCount = 0
+        if (includes.has('payment_events')) {
+          const allPaymentEvents = normalizedPaymentEvents(
+            input.id,
+            invoice.transactions,
+            invoice.relations,
+            'purchase_payment',
+          )
+          paymentEvents = allPaymentEvents.slice(0, input.paymentEventLimit)
+          omittedPaymentEventCount = allPaymentEvents.length - paymentEvents.length
+        }
+
+        return {
+          entity: input.entity,
+          record: projectFields(
+            input.entity,
+            input.fields,
+            normalizeEntityItem(input.entity, invoice),
+          ),
+          ...(includes.has('line_items') ? { lineItems: selectedItems } : {}),
+          ...(includes.has('relation_ids') ? { relations } : {}),
+          ...(includes.has('document_lineage') ? { documentLineage } : {}),
+          ...(includes.has('payment_events') ? { paymentEvents } : {}),
+          truncation: {
+            lineItems: includes.has('line_items') && omittedCount > 0,
+            ...(includes.has('line_items') && omittedCount > 0 ? { omittedCount } : {}),
+            ...(includes.has('document_lineage')
+              ? { documentLineage: omittedLineageDocumentCount > 0 }
+              : {}),
+            ...(omittedLineageDocumentCount > 0 ? { omittedLineageDocumentCount } : {}),
+            ...(includes.has('payment_events')
+              ? { paymentEvents: omittedPaymentEventCount > 0 }
+              : {}),
+            ...(omittedPaymentEventCount > 0 ? { omittedPaymentEventCount } : {}),
+          },
+          meta: {
+            fetchedAt: now().toISOString(),
+            ...(options.tenant ? { tenant: options.tenant } : {}),
+            warnings: [],
+          },
+        }
+      }
 
       if (input.entity !== 'sales_invoice') {
-        const includes = new Set(input.include ?? [])
-        if (includes.has('invoice_payments')) {
-          invalid(`${input.entity} does not support invoice_payments`)
+        const unsupportedSalesInvoiceInclude = (
+          [
+            'invoice_payments',
+            'document_lineage',
+            'payment_events',
+          ] as const
+        ).find((include) => includes.has(include))
+        if (unsupportedSalesInvoiceInclude) {
+          invalid(`${input.entity} does not support ${unsupportedSalesInvoiceInclude}`)
         }
         if (includes.size > 0 && !transactionIncludeEntities.has(input.entity)) {
           invalid(`${input.entity} does not support includes`)
@@ -1711,9 +2213,9 @@ export function createKledoHttpGateway(options: CreateKledoHttpGatewayOptions): 
         }
       }
 
-      const includes = new Set(input.include ?? [])
       const url = new URL(`finance/invoices/${input.id}`, baseUrl)
 
+      emitDiagnostic('get.sales_invoice.detail.request')
       const body = await requestJson(url, signal)
 
       const envelope = rawSalesInvoiceDetailEnvelopeSchema.parse(body)
@@ -1739,32 +2241,74 @@ export function createKledoHttpGateway(options: CreateKledoHttpGatewayOptions): 
             }
           : null,
       }))
+      let parentEntity: SalesInvoicePredecessorType = 'sales_order'
+      if (
+        invoice.parent_tran?.trans_type_id !== null &&
+        invoice.parent_tran?.trans_type_id !== undefined
+      ) {
+        const typedParentEntity = documentTypeForTransactionTypeId(
+          String(invoice.parent_tran.trans_type_id),
+        )
+        if (!isSalesInvoicePredecessorType(typedParentEntity)) {
+          throw new KledoError(
+            'SCHEMA_MISMATCH',
+            'Kledo returned an invalid immediate parent for the Sales Invoice',
+          )
+        }
+        parentEntity = typedParentEntity
+      }
       const relations = invoice.parent_tran
         ? [
             {
               relation: 'derived_from',
-              entity: 'sales_order' as const,
+              entity: parentEntity,
               id: String(invoice.parent_tran.id),
             },
           ]
         : []
-      let invoicePayments: KledoInvoicePayment[] = []
-      let omittedInvoicePaymentCount = 0
-      if (includes.has('invoice_payments')) {
-        const paymentsUrl = new URL(`finance/invoices/${input.id}/transactions`, baseUrl)
-        const paymentsBody = await requestJson(paymentsUrl, signal)
-        const paymentsEnvelope = rawInvoicePaymentsEnvelopeSchema.parse(paymentsBody)
-        const allInvoicePayments = normalizedInvoicePayments(input.id, paymentsEnvelope.data)
-        invoicePayments = allInvoicePayments.slice(0, input.invoicePaymentLimit)
-        omittedInvoicePaymentCount = allInvoicePayments.length - invoicePayments.length
+      let documentLineage:
+        | ReturnType<typeof normalizedSalesInvoiceLineage>['documentLineage']
+        | undefined
+      let omittedLineageDocumentCount = 0
+      if (includes.has('document_lineage')) {
+        const normalized = normalizedSalesInvoiceLineage(invoice, input.lineageLimit)
+        documentLineage = normalized.documentLineage
+        omittedLineageDocumentCount = normalized.omittedLineageDocumentCount
       }
 
-      return {
+      let invoicePayments: KledoInvoicePayment[] = []
+      let omittedInvoicePaymentCount = 0
+      let paymentEvents: KledoPaymentEvent[] = []
+      let omittedPaymentEventCount = 0
+      if (includes.has('invoice_payments') || includes.has('payment_events')) {
+        const paymentsUrl = new URL(`finance/invoices/${input.id}/transactions`, baseUrl)
+        emitDiagnostic('get.sales_invoice.payment_events.request')
+        const paymentsBody = await requestJson(paymentsUrl, signal)
+        const paymentsEnvelope = rawInvoicePaymentsEnvelopeSchema.parse(paymentsBody)
+        if (includes.has('invoice_payments')) {
+          const allInvoicePayments = normalizedInvoicePayments(input.id, paymentsEnvelope.data)
+          invoicePayments = allInvoicePayments.slice(0, input.invoicePaymentLimit)
+          omittedInvoicePaymentCount = allInvoicePayments.length - invoicePayments.length
+        }
+        if (includes.has('payment_events')) {
+          const allPaymentEvents = normalizedPaymentEvents(
+            input.id,
+            paymentsEnvelope.data,
+            invoice.relations,
+          )
+          paymentEvents = allPaymentEvents.slice(0, input.paymentEventLimit)
+          omittedPaymentEventCount = allPaymentEvents.length - paymentEvents.length
+        }
+      }
+
+      const output: KledoGetOutput = {
         entity: input.entity,
         record: projectFields(input.entity, input.fields, normalizedSalesInvoice(invoice)),
         ...(includes.has('line_items') ? { lineItems } : {}),
         ...(includes.has('relation_ids') ? { relations } : {}),
         ...(includes.has('invoice_payments') ? { invoicePayments } : {}),
+        ...(includes.has('document_lineage') ? { documentLineage } : {}),
+        ...(includes.has('payment_events') ? { paymentEvents } : {}),
         truncation: {
           lineItems: includes.has('line_items') && omittedCount > 0,
           ...(includes.has('line_items') && omittedCount > 0 ? { omittedCount } : {}),
@@ -1772,6 +2316,14 @@ export function createKledoHttpGateway(options: CreateKledoHttpGatewayOptions): 
             ? { invoicePayments: omittedInvoicePaymentCount > 0 }
             : {}),
           ...(omittedInvoicePaymentCount > 0 ? { omittedInvoicePaymentCount } : {}),
+          ...(includes.has('document_lineage')
+            ? { documentLineage: omittedLineageDocumentCount > 0 }
+            : {}),
+          ...(omittedLineageDocumentCount > 0 ? { omittedLineageDocumentCount } : {}),
+          ...(includes.has('payment_events')
+            ? { paymentEvents: omittedPaymentEventCount > 0 }
+            : {}),
+          ...(omittedPaymentEventCount > 0 ? { omittedPaymentEventCount } : {}),
         },
         meta: {
           fetchedAt: now().toISOString(),
@@ -1779,6 +2331,7 @@ export function createKledoHttpGateway(options: CreateKledoHttpGatewayOptions): 
           warnings: [],
         },
       }
+      return output
     },
 
     async report(input: KledoReportInput, signal?: AbortSignal): Promise<KledoReportOutput> {

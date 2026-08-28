@@ -118,7 +118,12 @@ yang terisolasi per tenant.
 Mapping salesperson yang masih fresh sudah dipakai untuk merutekan report
 dengan ID; jenis lain disiapkan untuk semantic routing berikutnya. Semua katalog
 bisa diisi lebih dulu dengan `npm run warmup` tanpa menambah tool MCP baru.
-## Versi MCP yang dipakai## Versi MCP yang dipakai
+Untuk Sales Invoice dan Purchase Invoice, `kledo_get` juga bisa mengembalikan
+lineage bertipe `QU -> SO -> DO -> INV` / `PQ -> PO -> PD -> PI` serta event
+`IP` / `PP` yang sudah dicocokkan dari sumber relasi dan transaksi Kledo,
+tetap melalui tool yang sama. `purchase_quote` juga tersedia lewat
+`kledo_query` dan `kledo_get` tanpa menambah tool publik baru.
+## Versi MCP yang dipakai
 
 Repo ini mengikuti revisi protokol MCP current,
 [`2026-07-28`](https://modelcontextprotocol.io/specification/2026-07-28), dan
@@ -137,6 +142,7 @@ dan [dokumen arsitektur repo](docs/architecture.md).
 | [Konfigurasi](docs/configuration.md) | Wizard, setup manual, secret manager, dan beberapa tenant |
 | [Setup klien](docs/client-setup.md) | Hermes, Codex, Claude Desktop, Cursor, dan MCP Inspector |
 | [Referensi tool](docs/tool-reference.md) | Kontrak tool, katalog entity, report, dan contoh pertanyaan |
+| [Peta siklus dokumen](docs/kledo-document-cycle-map.md) | Mapping QU/SO/DO/INV/IP dan PQ/PO/PD/PI/PP antara UI, API, dan MCP |
 | [Arsitektur](docs/architecture.md) | Alur data, versi protokol, batasan, transport, dan safe failure |
 | [Kebijakan keamanan](SECURITY.md) | Cara melaporkan celah keamanan dan menjaga credential |
 
