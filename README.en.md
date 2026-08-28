@@ -32,6 +32,30 @@ only for credential setup; MCP Inspector is optional developer tooling.
 **Status:** `0.1.x` preview. I am intentionally keeping the interface small
 while response shapes and report behavior are verified.
 
+## Kledo MCP at a glance
+
+```mermaid
+flowchart LR
+    U["User<br/>Everyday business question"] --> A["Any MCP-capable<br/>AI client or agent"]
+
+    subgraph LOCAL["Local machine: one tenant per process"]
+        M["kledo-mcp<br/>Read-only semantic layer<br/>kledo_query / kledo_get / kledo_report"]
+        S[("Optional local SQLite<br/>sanitized identities only")]
+        M -.->|Optional identity cache| S
+    end
+
+    A -->|Structured tool call| M
+    M -->|Allowlisted HTTPS GET| K["Kledo API<br/>User-configured tenant"]
+    K -->|Business data| M
+    M -->|Normalized result<br/>provenance and freshness| A
+    A --> R["A directly understandable answer"]
+```
+
+Kledo MCP is a local, read-only layer that translates business intent into
+bounded Kledo requests and returns structured results to the AI client. Users
+can work with everyday names and visible Document Numbers; the MCP resolves
+Kledo's numeric IDs internally when needed.
+
 ## Current MCP architecture
 
 > [!NOTE]

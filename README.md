@@ -33,6 +33,30 @@ untuk setup credential; MCP Inspector adalah alat debugging yang opsional.
 **Status:** masih preview `0.1.x`. Kontrak tool dijaga kecil sambil bentuk
 response dan perilaku report terus dicek.
 
+## Kledo MCP dalam satu gambar
+
+```mermaid
+flowchart LR
+    U["Pengguna<br/>Pertanyaan bisnis sehari-hari"] --> A["Klien atau agent AI<br/>yang mendukung MCP"]
+
+    subgraph LOCAL["Mesin lokal: satu tenant per proses"]
+        M["kledo-mcp<br/>Layer semantic read-only<br/>kledo_query / kledo_get / kledo_report"]
+        S[("SQLite lokal opsional<br/>identity tersanitasi saja")]
+        M -.->|Cache identity opsional| S
+    end
+
+    A -->|Tool call yang terstruktur| M
+    M -->|HTTPS GET yang ada di allowlist| K["Kledo API<br/>Tenant yang dikonfigurasi pengguna"]
+    K -->|Data bisnis| M
+    M -->|Hasil normalized<br/>provenance dan freshness| A
+    A --> R["Jawaban yang bisa langsung dipahami"]
+```
+
+Kledo MCP adalah layer read-only lokal yang menerjemahkan kebutuhan bisnis ke
+request Kledo yang dibatasi, lalu mengembalikan hasil terstruktur ke klien AI.
+Pengguna bisa memakai nama dan nomor dokumen yang terlihat sehari-hari;
+numeric ID Kledo diselesaikan di dalam MCP saat diperlukan.
+
 ## Quick setup
 
 Yang dibutuhkan:
