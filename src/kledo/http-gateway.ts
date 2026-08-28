@@ -2011,7 +2011,10 @@ export function createKledoHttpGateway(options: CreateKledoHttpGatewayOptions): 
   return {
     async warmIdentityCatalog(signal?: AbortSignal): Promise<KledoIdentityWarmupResult> {
       if (!identityCatalog) {
-        throw new KledoError('INTERNAL_ERROR', 'Local identity catalog is not configured')
+        throw new KledoError(
+          'UNSUPPORTED_OPERATION',
+          'Persistent identity warm-up requires KLEDO_IDENTITY_CACHE=sqlite',
+        )
       }
       const fetchedAt = now()
       const users = await fetchSalespersons(signal)

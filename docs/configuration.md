@@ -40,8 +40,10 @@ The wizard performs three stages:
 | Validate and connect | Runs the same configuration validation used by the production server | sanitized success or failure |
 
 The wizard never calls a Kledo data endpoint and never writes a GitHub Actions
-secret. It prints an optional identity warm-up command after local validation.
-CI uses synthetic fixtures and does not need a production credential.
+secret. Persistent identity storage remains disabled unless the operator opts
+in after setup. The wizard prints the optional SQLite setting and warm-up
+command after local validation. CI uses synthetic fixtures and does not need a
+production credential.
 
 ## Finding the Kledo values
 
@@ -64,7 +66,8 @@ for the generated bearer token.
 | --- | :---: | --- |
 | `KLEDO_API_BASE_URL` | Yes | Absolute HTTPS URL ending at the tenant API v1 root |
 | `KLEDO_API_TOKEN` | Yes | Kledo bearer token; a leading `Bearer ` prefix is accepted and normalized |
-| `KLEDO_STATE_DIR` | No | Absolute private directory for the local SQLite identity catalog |
+| `KLEDO_IDENTITY_CACHE` | No | `memory` by default; set to `sqlite` to opt into persistent identity storage |
+| `KLEDO_STATE_DIR` | No | Absolute private SQLite directory; valid only when `KLEDO_IDENTITY_CACHE=sqlite` |
 | `KLEDO_DEBUG` | No | Set to `1` for sanitized stderr diagnostic event names; defaults to `0` |
 
 The base URL must:
@@ -78,10 +81,12 @@ The base URL must:
 The server sends the bearer token only to the configured origin. Redirects to a
 different origin are rejected.
 
-## Local identity catalog
+## Optional local identity catalog
 
-The server keeps sanitized Kledo master-reference mappings in
-`identity-catalog.sqlite`. This lets a new MCP process resolve an exact
+The server keeps identity mappings in process memory by default and does not
+write them to disk. When the operator explicitly sets
+`KLEDO_IDENTITY_CACHE=sqlite`, sanitized Kledo master-reference mappings are
+persisted in `identity-catalog.sqlite`. This lets a new MCP process resolve an exact
 salesperson name to its Kledo ID without reloading `/users` while the snapshot
 is fresh. Other kinds are prefetched for future ID-based routing but are not
 exposed through another public MCP tool.
@@ -98,13 +103,15 @@ exposed through another public MCP tool.
 | `unit` | paginated `/finance/units` |
 | `account` | paginated `/finance/accounts` |
 
-The default directory is:
+When SQLite is enabled, the default directory is:
 
 - `~/Library/Application Support/kledo-mcp` on macOS;
 - `$XDG_STATE_HOME/kledo-mcp` when `XDG_STATE_HOME` is set; or
 - `~/.local/state/kledo-mcp` on other supported systems.
 
 Set `KLEDO_STATE_DIR` to an absolute private directory to override the default.
+Providing `KLEDO_STATE_DIR` without `KLEDO_IDENTITY_CACHE=sqlite` is rejected so
+the server never appears to persist data without explicit opt-in.
 The database stores only a pseudonymous tenant scope, entity type, external ID,
 display name, normalized name, active flag, and refresh timestamps. It does not
 store the bearer token, email address, phone number, address, tax data, raw
@@ -115,7 +122,13 @@ token rotation therefore causes a safe cold refresh instead of reusing an old
 credential scope. If SQLite is unavailable, name resolution falls back to the
 live `/users` endpoint and the tool result includes a sanitized warning.
 
-To populate or refresh the catalog explicitly after `.env` is configured:
+To opt in, add this setting to the private `.env` file:
+
+```env
+KLEDO_IDENTITY_CACHE=sqlite
+```
+
+Then populate or refresh the catalog explicitly:
 
 ```bash
 npm run warmup
@@ -150,8 +163,10 @@ cp .env.example .env
 chmod 600 .env
 npm run build
 npm run config:check
-npm run warmup
 ```
+
+The copied example defaults to memory-only operation. If persistent lookup is
+desired, set `KLEDO_IDENTITY_CACHE=sqlite` and then run `npm run warmup`.
 
 The tracked [`.env.example`](../.env.example) contains placeholders only. Local
 `.env` files are gitignored. Creating one does not make the server parse it
@@ -202,6 +217,6 @@ kledo_sinar_abadi -> process B -> tenant B URL and token
 ```
 
 There is intentionally no tenant selector in any MCP tool. See
-[client setup](client-setup.md) for registration examples. Separate processes
-may share the default SQLite file because every identity row is isolated by its
-pseudonymous tenant scope.
+[client setup](client-setup.md) for registration examples. When SQLite is
+explicitly enabled, separate processes may share the default database because
+every identity row is isolated by its pseudonymous tenant scope.
