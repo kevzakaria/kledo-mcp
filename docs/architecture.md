@@ -10,7 +10,7 @@ inputs.
 flowchart LR
     U[User] --> C[MCP client]
     C -->|bounded tool call| M[kledo-mcp]
-    M <-->|sanitized tenant-scoped identities| S[(Local SQLite)]
+    M -.->|optional sanitized identity persistence| S[(Local SQLite)]
     M -->|allowlisted HTTPS GET| K[Kledo API]
     K -->|tenant response| M
     M -->|normalized structured result| C
@@ -118,26 +118,27 @@ that cannot fit the MCP frame fails safely.
 
 ## Tenant identity catalog
 
-Exact salesperson name resolution uses a bounded in-memory cache backed by a
-local SQLite catalog. The same catalog stores sanitized contact roles, contact
-types and groups, products and categories, warehouses, units, and finance
-accounts under separate entity types. A fresh salesperson match can survive an
-MCP process restart; a missing or stale salesperson snapshot is refreshed from
-Kledo's `/users` endpoint before the native report is called with `sales_id`.
+Exact salesperson name resolution always uses a bounded in-memory cache. When
+the operator opts into `KLEDO_IDENTITY_CACHE=sqlite`, a local SQLite catalog
+backs that cache across process restarts and stores sanitized contact roles,
+contact types and groups, products and categories, warehouses, units, and
+finance accounts under separate entity types. Without opt-in, a missing memory
+entry is resolved from Kledo's `/users` endpoint before the native report is
+called with `sales_id`.
 
-The explicit `npm run warmup` adapter invokes the same internal refresh path
-before the first MCP query. It validates every allowlisted master source,
+After SQLite opt-in, the explicit `npm run warmup` adapter invokes the same
+internal refresh path before the first MCP query. It validates every allowlisted master source,
 walks paginated catalogs, derives contact-role snapshots from `type_ids`,
 flattens the product-category tree, and atomically replaces every sanitized
 tenant snapshot. It returns only counts and a timestamp. Warm-up is a local CLI
 operation, not a fourth public MCP tool.
 
-Rows are scoped by a one-way digest of the configured API origin and bearer
-token. The stored payload is limited to entity type, external ID, display and
+Persisted rows are scoped by a one-way digest of the configured API origin and
+bearer token. The stored payload is limited to entity type, external ID, display and
 normalized names, active state, and timestamps. Tokens, email addresses, raw
-responses, and accounting transactions are excluded. SQLite failures never
-select an identity from another scope: the gateway resolves from Kledo and
-returns a sanitized warning.
+responses, and accounting transactions are excluded. When persistence is
+enabled, SQLite failures never select an identity from another scope: the
+gateway resolves from Kledo and returns a sanitized warning.
 
 ## Safe failure behavior
 
