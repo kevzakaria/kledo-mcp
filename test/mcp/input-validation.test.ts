@@ -39,6 +39,40 @@ describe('public MCP input validation', () => {
     }
   })
 
+  it('defaults and bounds document-lineage and payment-event expansion', () => {
+    expect(
+      kledoGetInputSchema.parse({
+        entity: 'sales_invoice',
+        id: '500',
+        include: ['document_lineage', 'payment_events'],
+      }),
+    ).toEqual({
+      entity: 'sales_invoice',
+      id: '500',
+      include: ['document_lineage', 'payment_events'],
+      lineItemLimit: 50,
+      invoicePaymentLimit: 50,
+      lineageLimit: 50,
+      paymentEventLimit: 50,
+    })
+
+    for (const input of [
+      { lineageLimit: 0 },
+      { lineageLimit: 201 },
+      { paymentEventLimit: 0 },
+      { paymentEventLimit: 201 },
+    ]) {
+      expect(
+        kledoGetInputSchema.safeParse({
+          entity: 'sales_invoice',
+          id: '500',
+          include: ['document_lineage', 'payment_events'],
+          ...input,
+        }).success,
+      ).toBe(false)
+    }
+  })
+
   it('requires quoted strings for IDs, dates, decimal amounts, lists, and ranges', () => {
     for (const filter of [
       { field: 'contactId', op: 'eq', value: 9_007_199_254_740_990 },

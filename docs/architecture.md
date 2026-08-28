@@ -82,6 +82,13 @@ that cannot fit the MCP frame fails safely.
 - `pageInfo.hasMore` and `meta.complete` distinguish a page from a complete
   result.
 - Continuation cursors are opaque, signed, and bound to the original query.
+- Sales and Purchase Invoice document lineage uses an explicit transaction-type
+  registry. `relations[]` supplies the complete typed predecessor set and
+  `parent_tran` identifies the immediate predecessor. Sales Invoice payment
+  facts come from its transactions endpoint; Purchase Invoice payment facts are
+  embedded in the detail response because no purchase equivalent endpoint was
+  found. Payment relation and transaction halves must agree before a joined
+  event is returned.
 - Native report rows remain Kledo-shaped when their schema is undocumented,
   except for explicitly validated adapters such as `sales_by_person`,
   `sales_order_kpi`, `dormant_customers`, `receivable_by_invoice`, and

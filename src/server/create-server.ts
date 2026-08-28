@@ -137,7 +137,7 @@ export function createKledoMcpServer({ gateway }: CreateKledoMcpServerOptions): 
     {
       title: 'Get Kledo record',
       description:
-        `Retrieve one normalized Kledo record by entity and numeric ID. Use after kledo_query when the user needs line items, relationship IDs, or direct child Invoice Payment transactions for a sales invoice. The invoice_payments include returns only Kledo transaction type 17; each transactionDate is that direct payment event date, not the invoice's authoritative final settlement or paid date, and other child transaction types are excluded. ${UNTRUSTED_DATA_WARNING}`,
+        `Retrieve one normalized Kledo record by entity and numeric ID. Use after kledo_query when the user needs line items, relationship IDs, or invoice lifecycle details. document_lineage returns typed QU -> SO -> DO predecessors; for purchase_invoice it returns typed PQ -> PO -> PD predecessors. payment_events joins typed Invoice Payment or Purchase Payment relations to compact transaction facts. Sales payments come from the dedicated transactions endpoint; purchase payments are embedded in Purchase Invoice detail. The legacy invoice_payments include remains sales-only and returns Kledo type 17. Every payment transactionDate is that direct event date, not proof of final settlement. ${UNTRUSTED_DATA_WARNING}`,
       inputSchema: kledoGetInputSchema,
       outputSchema: kledoGetOutputSchema,
       annotations: READ_ONLY_ANNOTATIONS,

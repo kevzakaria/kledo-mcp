@@ -1,5 +1,6 @@
 import { z } from 'zod'
 
+import { kledoDocumentTypes } from '../domain/document-lineage.js'
 import type { JsonValue } from '../domain/json.js'
 
 export const kledoEntitySchema = z.enum([
@@ -10,6 +11,7 @@ export const kledoEntitySchema = z.enum([
   'sales_delivery',
   'purchase_delivery',
   'sales_quote',
+  'purchase_quote',
   'contact',
   'product',
   'account',
@@ -119,7 +121,7 @@ export const KLEDO_QUERY_FILTER_COMPATIBILITY = [
   'Filter compatibility:',
   'Use quoted strings for every ID, date, and decimal amount, including all in-list values and both between endpoints; only archived, canSell, canPurchase, and tracked use boolean values.',
   'ID filter operations default to eq only.',
-  'in is allowed only for productId on its supported transaction entities, product.categoryId, bank_transaction.transactionType, sales_order.statusId (status_id for eq; status_ids for in), and warehouseId on purchase_invoice, sales_order, purchase_order, purchase_delivery, sales_quote.',
+  'in is allowed only for productId on its supported transaction entities, product.categoryId, bank_transaction.transactionType, sales_order.statusId (status_id for eq; status_ids for in), and warehouseId on purchase_invoice, sales_order, purchase_order, purchase_delivery, sales_quote, or purchase_quote.',
   'sales_invoice=contactId,statusId,productId,transactionDate,dueDate,shippingDate,paymentDate,amount;',
   'purchase_invoice=contactId,statusId,productId,warehouseId,transactionDate,dueDate,shippingDate,paymentDate,amount;',
   'sales_order=contactId,statusId,productId,warehouseId,salesPersonId,transactionDate,dueDate,shippingDate,paymentDate,amount;',
@@ -127,6 +129,7 @@ export const KLEDO_QUERY_FILTER_COMPATIBILITY = [
   'sales_delivery=contactId,statusId,productId,warehouseId,salesPersonId,transactionDate,shippingDate,amount;',
   'purchase_delivery=contactId,statusId,productId,warehouseId,transactionDate;',
   'sales_quote=contactId,statusId,productId,warehouseId,salesPersonId,transactionDate,shippingDate,amount;',
+  'purchase_quote=contactId,statusId,productId,warehouseId,transactionDate,dueDate,amount;',
   'contact=typeId,groupId,archived;',
   'product=categoryId,archived,canSell,canPurchase,tracked;',
   'account=categoryId,archived;',
@@ -138,7 +141,7 @@ export const KLEDO_QUERY_FILTER_COMPATIBILITY = [
 const KLEDO_QUERY_SORT_COMPATIBILITY = [
   'Sort compatibility:',
   'sales_invoice,purchase_invoice=transactionDate,statusId,dueDate,total,memo,reference,remaining,paymentDate;',
-  'sales_order,purchase_order,sales_delivery,purchase_delivery,sales_quote=transactionDate,statusId,dueDate,total,memo,reference;',
+  'sales_order,purchase_order,sales_delivery,purchase_delivery,sales_quote,purchase_quote=transactionDate,statusId,dueDate,total,memo,reference;',
   'bank_transaction=transactionDate,memo,statusId;',
   'expense=transactionDate,statusId,remaining,total,reference;',
   'contact=name,company,payable,receivable;',
@@ -149,7 +152,7 @@ const KLEDO_QUERY_SORT_COMPATIBILITY = [
 
 const KLEDO_QUERY_PROJECTION_COMPATIBILITY = [
   'Projection compatibility:',
-  'sales_invoice,purchase_invoice,sales_order,purchase_order,sales_delivery,purchase_delivery,sales_quote,bank_transaction,expense=reference,transactionDate,dueDate,shippingDate,party,memo,statusId,total,remaining,paymentState,unbilled,sourceUpdatedAt,bankAccount,transactionType;',
+  'sales_invoice,purchase_invoice,sales_order,purchase_order,sales_delivery,purchase_delivery,sales_quote,purchase_quote,bank_transaction,expense=reference,transactionDate,dueDate,shippingDate,party,memo,statusId,total,remaining,paymentState,unbilled,sourceUpdatedAt,bankAccount,transactionType;',
   'contact=displayName,companyName,personName,groupId,typeIds,archived;',
   'product=code,name,category,canSell,canPurchase,tracked,basePrice,salePrice;',
   'account=code,name,category,balance,archived;',
@@ -228,11 +231,21 @@ export const kledoGetInputSchema = z
       .string()
       .regex(/^[1-9]\d{0,19}$/, 'id must be a positive decimal Kledo ID of at most 20 digits'),
     include: z
-      .array(z.enum(['line_items', 'relation_ids', 'invoice_payments']))
-      .max(3)
+      .array(
+        z.enum([
+          'line_items',
+          'relation_ids',
+          'invoice_payments',
+          'document_lineage',
+          'payment_events',
+        ]),
+      )
+      .max(5)
       .optional(),
     lineItemLimit: z.number().int().min(1).max(200).default(50),
     invoicePaymentLimit: z.number().int().min(1).max(200).default(50),
+    lineageLimit: z.number().int().min(1).max(200).default(50),
+    paymentEventLimit: z.number().int().min(1).max(200).default(50),
     fields: z.array(z.string().trim().min(1).max(80)).max(40).optional(),
   })
   .strict()
@@ -868,6 +881,26 @@ const receivableByInvoiceReportOutputSchema = z
   })
   .strict()
 
+export const kledoDocumentTypeSchema = z.enum(kledoDocumentTypes)
+
+const lineageDocumentOutputSchema = z
+  .object({
+    documentType: kledoDocumentTypeSchema,
+    transactionTypeId: idSchema,
+    id: idSchema,
+    number: z.string().trim().min(1),
+  })
+  .strict()
+
+export const documentLineageOutputSchema = z
+  .object({
+    anchor: lineageDocumentOutputSchema,
+    immediateParent: lineageDocumentOutputSchema.nullable(),
+    predecessors: z.array(lineageDocumentOutputSchema),
+    complete: z.boolean(),
+  })
+  .strict()
+
 export const invoicePaymentOutputSchema = z
   .object({
     id: z.string().regex(/^[1-9]\d{0,19}$/),
@@ -876,7 +909,7 @@ export const invoicePaymentOutputSchema = z
       .string()
       .date()
       .describe(
-        'Date of this direct Kledo type-17 Invoice Payment event; not the invoice final settlement or paid date.',
+        'Date of this direct Kledo invoice-payment event; not the invoice final settlement or paid date.',
       ),
     amount: normalizedMoneyOutputSchema,
     statusId: z.string().regex(/^[1-9]\d{0,19}$/).nullable(),
@@ -891,6 +924,28 @@ export const invoicePaymentOutputSchema = z
   })
   .strict()
 
+const paymentEventBaseOutputSchema = invoicePaymentOutputSchema.extend({
+  transactionDate: z
+    .string()
+    .date()
+    .describe(
+      'Date of this direct Kledo sales or purchase payment event; not proof of final settlement or paid date.',
+    ),
+  relation: z.literal('payment_for'),
+  number: z.string().trim().min(1),
+})
+
+export const paymentEventOutputSchema = z.discriminatedUnion('documentType', [
+  paymentEventBaseOutputSchema.extend({
+    documentType: z.literal('invoice_payment'),
+    transactionTypeId: z.literal('17'),
+  }),
+  paymentEventBaseOutputSchema.extend({
+    documentType: z.literal('purchase_payment'),
+    transactionTypeId: z.literal('16'),
+  }),
+])
+
 export const kledoGetOutputSchema = z
   .object({
     entity: kledoDetailEntitySchema,
@@ -900,6 +955,13 @@ export const kledoGetOutputSchema = z
       .array(invoicePaymentOutputSchema)
       .describe(
         'Direct child Invoice Payment transactions only (Kledo type 17); other child transaction types are excluded.',
+      )
+      .optional(),
+    documentLineage: documentLineageOutputSchema.optional(),
+    paymentEvents: z
+      .array(paymentEventOutputSchema)
+      .describe(
+        'Typed sales or purchase invoice payment events joined from document relations and compact transaction rows; not proof of final settlement.',
       )
       .optional(),
     relations: z
@@ -919,6 +981,10 @@ export const kledoGetOutputSchema = z
         omittedCount: z.number().int().nonnegative().optional(),
         invoicePayments: z.boolean().optional(),
         omittedInvoicePaymentCount: z.number().int().nonnegative().optional(),
+        documentLineage: z.boolean().optional(),
+        omittedLineageDocumentCount: z.number().int().nonnegative().optional(),
+        paymentEvents: z.boolean().optional(),
+        omittedPaymentEventCount: z.number().int().nonnegative().optional(),
       })
       .strict(),
     meta: resultMetaSchema.omit({ complete: true }),
@@ -958,3 +1024,4 @@ export type KledoQueryOutput = z.infer<typeof kledoQueryOutputSchema>
 export type KledoGetOutput = z.infer<typeof kledoGetOutputSchema>
 export type KledoReportOutput = z.infer<typeof kledoReportOutputSchema>
 export type KledoInvoicePayment = z.infer<typeof invoicePaymentOutputSchema>
+export type KledoPaymentEvent = z.infer<typeof paymentEventOutputSchema>

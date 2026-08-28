@@ -31,6 +31,7 @@ const fixturesByPath: Record<string, object> = {
   '/api/v1/finance/deliveries/101': documentFixture,
   '/api/v1/finance/purchaseDeliveries/101': documentFixture,
   '/api/v1/finance/quotes/101': documentFixture,
+  '/api/v1/finance/purchaseQuotes/101': documentFixture,
   '/api/v1/finance/contacts/101': {
     id: 101,
     name: 'Alya',
@@ -114,6 +115,7 @@ describe('kledo_get entity catalog', () => {
       ['sales_delivery', '/api/v1/finance/deliveries/101'],
       ['purchase_delivery', '/api/v1/finance/purchaseDeliveries/101'],
       ['sales_quote', '/api/v1/finance/quotes/101'],
+      ['purchase_quote', '/api/v1/finance/purchaseQuotes/101'],
       ['contact', '/api/v1/finance/contacts/101'],
       ['product', '/api/v1/finance/products/101'],
       ['account', '/api/v1/finance/accounts/101'],

@@ -219,6 +219,7 @@ describe('kledo_query options', () => {
         ['purchase_order', 'purchaseOrders'],
         ['purchase_delivery', 'purchaseDeliveries'],
         ['sales_quote', 'quotes'],
+        ['purchase_quote', 'purchaseQuotes'],
       ].map(([entity, path]) => ({
         arguments: {
           entity,

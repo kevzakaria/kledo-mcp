@@ -141,13 +141,18 @@ Later processes can route salesperson reports by ID without reloading `/users`
 while that snapshot is fresh; other kinds are ready for later semantic routing.
 After opt-in, run `npm run warmup` to prefetch them without adding another MCP
 tool.
-## Documentation## Documentation
+For Sales and Purchase Invoices, `kledo_get` can also return the typed
+`QU -> SO -> DO -> INV` / `PQ -> PO -> PD -> PI` lineage and joined `IP` / `PP`
+events through that same tool. `purchase_quote` is available through
+`kledo_query` and `kledo_get` without adding another public tool.
+## Documentation
 
 | Guide | Contents |
 | --- | --- |
 | [Configuration](docs/configuration.md) | Wizard, manual setup, secret handling, and multiple tenants |
 | [Client setup](docs/client-setup.md) | Hermes, Codex, Claude Desktop, Cursor, and MCP Inspector |
 | [Tool reference](docs/tool-reference.md) | Tool contracts, entity catalog, reports, and example questions |
+| [Document cycle map](docs/kledo-document-cycle-map.md) | QU/SO/DO/INV/IP and PQ/PO/PD/PI/PP mapping across UI, API, and MCP |
 | [Architecture](docs/architecture.md) | Data flow, protocol target, boundaries, transport behavior, and safe failures |
 | [Security policy](SECURITY.md) | Vulnerability reporting and credential safety |
 

@@ -20,13 +20,33 @@ Retrieves one normalized record by entity and numeric Kledo ID. Optional
 only when already present in the detail response and are never followed
 recursively.
 
+For `sales_invoice` and `purchase_invoice`, `document_lineage` validates the
+anchor transaction type, reads the authoritative typed `relations[]`, and
+returns the ordered predecessors. Sales uses Sales Quote (4), Sales Order (6),
+and Sales Delivery (7); purchases use Purchase Quote (63), Purchase Order (2),
+and Purchase Delivery (8). It also checks that `parent_tran` names the same
+typed immediate predecessor. It never infers a document type from lifecycle
+position or numeric ordering. The `lineageLimit` defaults to 50 and is capped
+at 200; truncation is explicit and sets `documentLineage.complete` to false.
+
+The `payment_events` include joins typed payment relations, which carry the
+document number, to compact transaction rows, which carry the event date,
+amount, status, payment type, and destination bank account. Sales Invoice uses
+Invoice Payment type 17 plus its dedicated child-transactions endpoint.
+Purchase Invoice uses Purchase Payment type 16 embedded in the detail response;
+the verified API has no Purchase Invoice child-transactions route. Missing or
+conflicting halves fail safely rather than returning a partially joined event.
+`paymentEventLimit` defaults to 50 and is capped at 200.
+
 For `sales_invoice`, the optional `invoice_payments` include returns bounded
 child Invoice Payment transactions (`IP`, Kledo transaction type 17), including
 payment date, amount, and destination bank account when supplied by Kledo. This
 is direct payment-event history, not an authoritative settlement date. Credits
 and non-IP child transaction types remain outside this include.
 
-`invoicePaymentLimit` defaults to 50 and is capped at 200.
+`invoicePaymentLimit` defaults to 50 and is capped at 200. It remains as a
+backward-compatible compact view; new lifecycle-aware callers should use
+`document_lineage` and `payment_events`.
 
 ## `kledo_report`
 
@@ -127,6 +147,7 @@ inspectable.
 | Sales delivery | `sales_delivery` | Yes |
 | Purchase delivery | `purchase_delivery` | Yes |
 | Sales quote | `sales_quote` | Yes |
+| Purchase quote | `purchase_quote` | Yes |
 | Contact | `contact` | Yes |
 | Product | `product` | Yes |
 | Account | `account` | Yes |
@@ -164,6 +185,8 @@ The MCP client chooses a tool. Users do not need to know Kledo endpoint names.
 | "Find invoices for PT Maju Jaya." | `kledo_query` |
 | "Show the line items for invoice ID 123." | `kledo_get` |
 | "List direct payment events and destination accounts for invoice ID 123." | `kledo_get` with `invoice_payments` |
+| "Trace invoice ID 123 back through its quote, order, delivery, and payments." | `kledo_get` with `document_lineage` and `payment_events` |
+| "Trace purchase invoice ID 456 back through its quote, order, delivery, and payment." | `kledo_get` with `document_lineage` and `payment_events` |
 | "What is the aged receivable position as of today?" | `kledo_report` |
 | "Which customers owe us, which invoices, and what project is each invoice for?" | `kledo_report` with `receivable_by_invoice` |
 | "Compare sales this month with last month." | `kledo_report` |
@@ -181,7 +204,7 @@ instead of presenting them as company totals.
 
 Version `0.1.0` implements the complete catalog above:
 
-- `kledo_query` routes all 14 entities through explicit GET paths, bounded
+- `kledo_query` routes all 15 entities through explicit GET paths, bounded
   pages, signed query-bound cursors where Kledo documents continuation,
   canonical filters, one sort key, and local field projection;
 - `bank_transaction` queries require an explicit `bankAccountId` equality
@@ -189,10 +212,16 @@ Version `0.1.0` implements the complete catalog above:
 - `product` and `unit` do not have a documented ordinary `page` parameter. If
   Kledo reports more data than the bounded response, the result is marked
   incomplete instead of inventing an unsupported continuation;
-- `kledo_get` routes all 13 entities with detail GET endpoints. `unit` is absent
+- `kledo_get` routes all 14 entities with detail GET endpoints. `unit` is absent
   from the detail schema because Kledo exposes no unit detail GET;
 - transaction documents support bounded `line_items` and directly present
   `relation_ids` without recursive graph requests;
+- sales and purchase invoice detail can include bounded typed QU -> SO -> DO or
+  PQ -> PO -> PD predecessor chains plus joined Invoice or Purchase Payment
+  events. The adapter reconciles `relations[]`, `parent_tran`, and the available
+  transaction source; unexpected type, parent, relation, account, or row shapes
+  fail safely. The legacy bounded `invoice_payments` view remains available for
+  Sales Invoice only;
 - `kledo_report` routes 12 native reports plus the `sales_order_kpi`,
   `dormant_customers`, `receivable_by_invoice`, and `item_price_analysis`
   semantic adapters;

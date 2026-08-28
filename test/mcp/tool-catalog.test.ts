@@ -147,23 +147,61 @@ describe('Kledo MCP tool catalog', () => {
     expect(getTool?.inputSchema).toMatchObject({
       properties: {
         include: {
-          items: { enum: ['line_items', 'relation_ids', 'invoice_payments'] },
-          maxItems: 3,
+          items: {
+            enum: [
+              'line_items',
+              'relation_ids',
+              'invoice_payments',
+              'document_lineage',
+              'payment_events',
+            ],
+          },
+          maxItems: 5,
         },
         invoicePaymentLimit: { default: 50, minimum: 1, maximum: 200 },
+        lineageLimit: { default: 50, minimum: 1, maximum: 200 },
+        paymentEventLimit: { default: 50, minimum: 1, maximum: 200 },
       },
     })
     expect(getTool?.outputSchema).toMatchObject({
       properties: {
         invoicePayments: { type: 'array' },
+        documentLineage: { type: 'object' },
+        paymentEvents: { type: 'array' },
         truncation: {
           properties: {
             invoicePayments: { type: 'boolean' },
             omittedInvoicePaymentCount: { minimum: 0, type: 'integer' },
+            documentLineage: { type: 'boolean' },
+            omittedLineageDocumentCount: { minimum: 0, type: 'integer' },
+            paymentEvents: { type: 'boolean' },
+            omittedPaymentEventCount: { minimum: 0, type: 'integer' },
           },
         },
       },
     })
+    const paymentEventVariants = (
+      getTool?.outputSchema as {
+        properties?: {
+          paymentEvents?: {
+            items?: {
+              oneOf?: Array<{
+                properties?: { transactionDate?: { description?: string } }
+              }>
+            }
+          }
+        }
+      }
+    ).properties?.paymentEvents?.items?.oneOf
+    expect(paymentEventVariants).toHaveLength(2)
+    expect(
+      paymentEventVariants?.every((variant) =>
+        /sales or purchase payment event/i.test(
+          variant.properties?.transactionDate?.description ?? '',
+        ),
+      ),
+    ).toBe(true)
+
     const reportTool = tools.find(({ name }) => name === 'kledo_report')
     expect(reportTool?.description).toMatch(
       /sales_by_person.*grouped by or filtered to a salesperson.*sales_order_kpi.*deal intake.*not revenue.*income_by_customer.*group or rank customers.*dormant_customers.*not proof of churn.*receivable_by_invoice.*memo.*Reference.*item_price_analysis.*exact.*SKU.*sales_by_period.*time buckets/is,

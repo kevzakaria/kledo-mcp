@@ -30,6 +30,7 @@ const fixturesByPath: Record<string, object> = {
   '/api/v1/finance/deliveries': documentFixture,
   '/api/v1/finance/purchaseDeliveries': documentFixture,
   '/api/v1/finance/quotes': documentFixture,
+  '/api/v1/finance/purchaseQuotes': documentFixture,
   '/api/v1/finance/contacts': {
     id: 44,
     name: 'Alya',
@@ -163,6 +164,7 @@ describe('kledo_query entity catalog', () => {
       ['sales_delivery', '/api/v1/finance/deliveries?per_page=2&page=1'],
       ['purchase_delivery', '/api/v1/finance/purchaseDeliveries?per_page=2&page=1'],
       ['sales_quote', '/api/v1/finance/quotes?per_page=2&page=1'],
+      ['purchase_quote', '/api/v1/finance/purchaseQuotes?per_page=2&page=1'],
       ['contact', '/api/v1/finance/contacts?per_page=2&page=1'],
       ['product', '/api/v1/finance/products?per_page=2'],
       ['account', '/api/v1/finance/accounts?per_page=2&page=1'],

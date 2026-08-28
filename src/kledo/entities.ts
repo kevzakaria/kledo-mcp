@@ -200,6 +200,12 @@ export const entityDefinitions: Record<KledoEntity, EntityDefinition> = {
     pagination: 'page',
     supportsSearch: true,
   },
+  purchase_quote: {
+    path: 'finance/purchaseQuotes',
+    detailPath: 'finance/purchaseQuotes',
+    pagination: 'page',
+    supportsSearch: true,
+  },
   contact: {
     path: 'finance/contacts',
     detailPath: 'finance/contacts',
@@ -252,6 +258,7 @@ export const transactionIncludeEntities = new Set<KledoEntity>([
   'sales_delivery',
   'purchase_delivery',
   'sales_quote',
+  'purchase_quote',
   'expense',
 ])
 
