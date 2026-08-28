@@ -49,13 +49,21 @@ API**, menerima token lewat input terminal tersembunyi, lalu
 menulis `.env` yang sudah diabaikan Git dan hanya bisa dibaca oleh pemilik file.
 Validasi awal dilakukan secara lokal tanpa memanggil API Kledo.
 
-Untuk mengisi katalog reference ID tenant sebelum query MCP pertama, jalankan:
+Secara default, identity mapping hanya disimpan di memory proses dan tidak
+ditulis ke disk. Kalau ingin mapping tetap tersedia setelah MCP restart, ubah
+baris berikut di `.env`:
+
+```env
+KLEDO_IDENTITY_CACHE=sqlite
+```
+
+Lalu isi katalog reference ID tenant secara eksplisit:
 
 ```bash
 npm run warmup
 ```
 
-Command ini membaca master data read-only untuk salesperson, contact beserta
+Command opt-in ini membaca master data read-only untuk salesperson, contact beserta
 tipenya, contact group, product/category, warehouse, unit, dan finance account.
 SQLite lokal hanya menyimpan ID, nama tampilan, status aktif, tenant scope, dan
 timestamp yang sudah disanitasi. Output hanya menampilkan jumlah per jenis dan
@@ -85,8 +93,8 @@ Pasang dan konfigurasikan kledo-mcp dari https://github.com/kevzakaria/kledo-mcp
 
 Pakai secret manager lain atau ingin mengatur environment sendiri? Baca
 [panduan konfigurasi dan secret](docs/configuration.md). Server hanya membaca
-`KLEDO_API_BASE_URL`, `KLEDO_API_TOKEN`, dan `KLEDO_STATE_DIR` yang opsional
-dari environment proses.
+`KLEDO_API_BASE_URL`, `KLEDO_API_TOKEN`, `KLEDO_IDENTITY_CACHE`, dan
+`KLEDO_STATE_DIR` yang opsional dari environment proses.
 
 ## Tiga tool read-only
 
@@ -113,11 +121,13 @@ memisahkan harga katalog, harga transaksi terakhir, dan profitabilitas periode
 untuk satu produk, dan `sales_by_period` khusus untuk bucket waktu. Kalau nama
 produk cocok ke lebih dari satu barang, caller wajib mengulang dengan SKU yang
 exact. Kandidat dormant bukan bukti customer sudah churn dan tidak memicu
-pengiriman pesan. Mapping nama master reference disimpan di katalog SQLite lokal
-yang terisolasi per tenant.
+pengiriman pesan. Mapping nama master reference memakai memory secara default.
+SQLite lokal yang terisolasi per tenant hanya dipakai setelah operator memilih
+`KLEDO_IDENTITY_CACHE=sqlite`.
 Mapping salesperson yang masih fresh sudah dipakai untuk merutekan report
 dengan ID; jenis lain disiapkan untuk semantic routing berikutnya. Semua katalog
-bisa diisi lebih dulu dengan `npm run warmup` tanpa menambah tool MCP baru.
+bisa diisi lebih dulu dengan `npm run warmup` setelah opt-in tanpa menambah tool
+MCP baru.
 ## Versi MCP yang dipakai## Versi MCP yang dipakai
 
 Repo ini mengikuti revisi protokol MCP current,

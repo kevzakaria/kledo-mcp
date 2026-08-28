@@ -66,13 +66,20 @@ directly, accepts the token through hidden terminal input, writes a
 gitignored `.env` with owner-only permissions, and validates the local
 configuration without making a Kledo API request.
 
-To populate the tenant reference-ID catalogs before the first MCP query, run:
+By default, identity mappings stay in process memory and are not written to
+disk. To keep mappings across MCP restarts, change this line in `.env`:
+
+```env
+KLEDO_IDENTITY_CACHE=sqlite
+```
+
+Then populate the tenant reference-ID catalogs explicitly:
 
 ```bash
 npm run warmup
 ```
 
-This reads the allowlisted, read-only master data for salespersons, contacts and
+This opt-in command reads the allowlisted, read-only master data for salespersons, contacts and
 their types, contact groups, products and categories, warehouses, units, and
 finance accounts. Local SQLite stores only sanitized IDs, display names, active
 states, tenant scope, and timestamps. Output is limited to counts by kind and
@@ -100,8 +107,8 @@ Install and configure kledo-mcp from https://github.com/kevzakaria/kledo-mcp.
 
 Prefer another secret manager or a manually managed environment? Read
 [configuration and secret handling](docs/configuration.md). The server only
-reads `KLEDO_API_BASE_URL`, `KLEDO_API_TOKEN`, and the optional
-`KLEDO_STATE_DIR` from its process environment.
+reads `KLEDO_API_BASE_URL`, `KLEDO_API_TOKEN`, `KLEDO_IDENTITY_CACHE`, and the
+optional `KLEDO_STATE_DIR` from its process environment.
 
 ## Three read-only tools
 
@@ -127,10 +134,13 @@ customer and invoice-level receivables while mapping API `memo` to the Web UI
 Reference/project field. `item_price_analysis` keeps
 catalog settings, latest transaction prices, and period profitability separate
 for one product; multiple name matches require an exact SKU. Sanitized
-master-reference mappings are kept in a tenant-scoped local SQLite catalog.
+master-reference mappings stay in memory by default. A tenant-scoped local
+SQLite catalog is used only after the operator selects
+`KLEDO_IDENTITY_CACHE=sqlite`.
 Later processes can route salesperson reports by ID without reloading `/users`
-while that snapshot is fresh; other kinds are ready for later semantic routing. Run
-`npm run warmup` to prefetch them without adding another MCP tool.
+while that snapshot is fresh; other kinds are ready for later semantic routing.
+After opt-in, run `npm run warmup` to prefetch them without adding another MCP
+tool.
 ## Documentation## Documentation
 
 | Guide | Contents |
