@@ -134,18 +134,18 @@ entry is resolved from Kledo's `/users` endpoint before the native report is
 called with `sales_id`.
 
 After SQLite opt-in, the explicit `npm run warmup` adapter invokes the same
-internal refresh path before the first MCP query. It validates every allowlisted master source,
-walks paginated catalogs, derives contact-role snapshots from `type_ids`,
-flattens the product-category tree, and atomically replaces every sanitized
-tenant snapshot. It returns only counts and a timestamp. Warm-up is a local CLI
-operation, not a fourth public MCP tool.
+internal refresh path before the first MCP query. It validates every
+allowlisted master source, walks paginated catalogs, derives contact-role
+snapshots from `type_ids`, flattens the product-category tree, and atomically
+replaces every sanitized tenant snapshot. It returns only counts and a
+timestamp. Warm-up is a local CLI operation, not a fourth public MCP tool.
 
 Persisted rows are scoped by a one-way digest of the configured API origin and
-bearer token. The stored payload is limited to entity type, external ID, display and
-normalized names, active state, and timestamps. Tokens, email addresses, raw
-responses, and accounting transactions are excluded. When persistence is
-enabled, SQLite failures never select an identity from another scope: the
-gateway resolves from Kledo and returns a sanitized warning.
+bearer token. The stored payload is limited to entity type, external ID,
+display and normalized names, active state, and timestamps. Tokens, email
+addresses, raw responses, and accounting transactions are excluded. When
+persistence is enabled, SQLite failures never select an identity from another
+scope: the gateway resolves from Kledo and returns a sanitized warning.
 
 ## Safe failure behavior
 

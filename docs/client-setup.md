@@ -143,9 +143,11 @@ The trace shows the cold `/users` request, sanitized SQLite write, simulated MCP
 restart, warm SQLite lookup, report request by `sales_id`, and the single-refresh
 behavior for an unknown name. It uses only synthetic fixture data.
 
-With a private `.env` configured, run `npm run warmup` to fetch the authorized
+Persistent warm-up is optional. With a private `.env` configured, first set
+`KLEDO_IDENTITY_CACHE=sqlite`, then run `npm run warmup` to fetch the authorized
 tenant's sanitized master-reference catalogs before opening a client. The
-command prints only stored counts by kind and the refresh timestamp; inspect
+command refuses to contact Kledo unless SQLite persistence is explicitly
+enabled. It prints only stored counts by kind and the refresh timestamp; inspect
 IDs locally with a read-only SQLite client when needed.
 
 ## Visual debugging with MCP Inspector
