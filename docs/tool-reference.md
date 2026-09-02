@@ -179,6 +179,13 @@ inspectable.
 | Warehouse | `warehouse` | Yes |
 | Unit | `unit` | No detail endpoint |
 
+Sales Invoice query and detail records include `salesPerson` (`id` plus a
+nullable `name`) and sanitized `tags` (`id` and `name` only). List records use
+a null salesperson name only when Kledo supplies `sales_id` without either
+salesperson object. `sales_invoice` queries accept
+`salesPersonId` with `eq` or `in`, mapped to Kledo's `sales_id` parameter.
+`salesPerson` and `tags` can also be selected through `fields`.
+
 ## Report catalog
 
 - `executive_summary`

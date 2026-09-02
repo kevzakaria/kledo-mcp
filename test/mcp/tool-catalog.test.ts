@@ -116,7 +116,7 @@ describe('Kledo MCP tool catalog', () => {
     expect(filterField?.description).toMatch(/warehouse=none.*unit=none/is)
     expect(filterField?.description).toMatch(/ID filter operations default to eq only/i)
     expect(filterField?.description).toMatch(
-      /in is allowed only for.*productId.*product\.categoryId.*bank_transaction\.transactionType.*sales_order\.statusId.*warehouseId.*purchase_invoice.*sales_quote/is,
+      /in is allowed only for.*productId.*product\.categoryId.*bank_transaction\.transactionType.*sales_invoice\.salesPersonId.*sales_order\.statusId.*warehouseId.*purchase_invoice.*sales_quote/is,
     )
     expect(queryTool?.description).toMatch(/ID filter operations default to eq only/i)
     expect(sortField?.enum).toEqual([
@@ -139,9 +139,21 @@ describe('Kledo MCP tool catalog', () => {
     ])
     expect(sortField?.description).toMatch(/contact=.*payable.*warehouse=none/is)
     expect(queryProperties?.fields?.items?.enum).toEqual(
-      expect.arrayContaining(['kind', 'id', 'party', 'paymentState', 'displayName', 'balance']),
+      expect.arrayContaining([
+        'kind',
+        'id',
+        'party',
+        'paymentState',
+        'salesPerson',
+        'tags',
+        'displayName',
+        'balance',
+      ]),
     )
-    expect(queryProperties?.fields?.items?.description).toMatch(/sales_invoice.*contact=.*displayName/is)
+    expect(queryProperties?.fields?.items?.description).toMatch(
+      /sales_invoice=.*salesPerson,tags/is,
+    )
+    expect(queryProperties?.fields?.items?.description).toMatch(/contact=.*displayName/is)
 
     const getTool = tools.find(({ name }) => name === 'kledo_get')
     const getInputSchema = getTool?.inputSchema as

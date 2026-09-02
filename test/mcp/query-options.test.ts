@@ -35,6 +35,19 @@ describe('kledo_query options', () => {
                 trans_date: '2026-08-01',
                 due_date: '2026-08-31',
                 contact: { id: 44, name: 'Alya', company: 'PT Maju Jaya' },
+                sales_id: 352181,
+                sales: { id: 352181, name: 'Elmo Abu Abdillah' },
+                tags: [
+                  {
+                    id: 1,
+                    name: 'Penjualan Material',
+                    color: '#000000',
+                    owner_id: 145707,
+                    local_id: 'fixture-private-local-id',
+                    is_archive: 0,
+                    is_system_reserved: 0,
+                  },
+                ],
                 amount_after_tax: '1500000.00',
                 due: '500000.00',
                 memo: 'Fixture memo',
@@ -79,6 +92,7 @@ describe('kledo_query options', () => {
         search: 'PT Maju Jaya',
         filters: [
           { field: 'contactId', op: 'eq', value: '44' },
+          { field: 'salesPersonId', op: 'eq', value: '352181' },
           { field: 'statusId', op: 'eq', value: '1' },
           {
             field: 'transactionDate',
@@ -90,29 +104,44 @@ describe('kledo_query options', () => {
           { field: 'productId', op: 'in', value: ['5', '6'] },
         ],
         sort: [{ field: 'transactionDate', direction: 'desc' }],
-        fields: ['reference', 'transactionDate', 'total', 'paymentState'],
+        fields: [
+          'reference',
+          'transactionDate',
+          'total',
+          'paymentState',
+          'salesPerson',
+          'tags',
+        ],
         pageSize: 5,
       },
     })
 
     expect(result.isError).not.toBe(true)
     expect(requestedUrls).toEqual([
-      '/api/v1/finance/invoices?search=PT+Maju+Jaya&contact_id=44&status_id=1&date_from=2026-08-01&date_to=2026-08-31&due_date_to=2026-09-30&amount_gte=1000.00&product_id=5%2C6&sort_by=trans_date&order_by=desc&per_page=5&page=1',
+      '/api/v1/finance/invoices?search=PT+Maju+Jaya&contact_id=44&sales_id=352181&status_id=1&date_from=2026-08-01&date_to=2026-08-31&due_date_to=2026-09-30&amount_gte=1000.00&product_id=5%2C6&sort_by=trans_date&order_by=desc&per_page=5&page=1',
     ])
-    expect(result.structuredContent).toMatchObject({
-      items: [
-        {
-          kind: 'sales_invoice',
-          id: '101',
-          reference: 'INV/2026/001',
-          transactionDate: '2026-08-01',
-          total: { amount: '1500000.00', currency: null },
-          paymentState: 'partially_paid',
-        },
-      ],
+    const structuredContent = result.structuredContent
+    if (
+      !structuredContent ||
+      typeof structuredContent !== 'object' ||
+      !('items' in structuredContent) ||
+      !Array.isArray(structuredContent.items)
+    ) {
+      throw new Error('Expected projected invoice items')
+    }
+    const { items } = structuredContent
+    expect(items[0]).toEqual({
+      kind: 'sales_invoice',
+      id: '101',
+      reference: 'INV/2026/001',
+      transactionDate: '2026-08-01',
+      total: { amount: '1500000.00', currency: null },
+      paymentState: 'partially_paid',
+      salesPerson: { id: '352181', name: 'Elmo Abu Abdillah' },
+      tags: [{ id: '1', name: 'Penjualan Material' }],
     })
-    expect((result.structuredContent as { items: object[] }).items[0]).not.toHaveProperty('party')
-    expect((result.structuredContent as { items: object[] }).items[0]).not.toHaveProperty('memo')
+    expect(items[0]).not.toHaveProperty('party')
+    expect(items[0]).not.toHaveProperty('memo')
   })
 
   it('serializes comma lists only for ID filters documented as plural', async () => {
@@ -194,6 +223,14 @@ describe('kledo_query options', () => {
           pageSize: 2,
         },
         url: '/api/v1/finance/orders?status_ids=1%2C3&product_id=5%2C6&warehouse_id=2%2C3&per_page=2&page=1',
+      },
+      {
+        arguments: {
+          entity: 'sales_invoice',
+          filters: [{ field: 'salesPersonId', op: 'in', value: ['352181', '352182'] }],
+          pageSize: 2,
+        },
+        url: '/api/v1/finance/invoices?sales_id=352181%2C352182&per_page=2&page=1',
       },
       {
         arguments: {
