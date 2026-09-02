@@ -22,6 +22,7 @@ import {
   entityDefinitions,
   exactIdSchema,
   normalizeEntityItem,
+  normalizeSalesInvoiceMetadata,
   normalizeMoney,
   normalizeTransactionExtras,
   transactionIncludeEntities,
@@ -719,6 +720,7 @@ function normalizedSalesInvoice(invoice: z.infer<typeof rawSalesInvoiceSchema>):
       companyName,
       personName,
     },
+    ...normalizeSalesInvoiceMetadata(invoice),
     memo: invoice.memo,
     statusId:
       invoice.status_id === null || invoice.status_id === undefined ? null : String(invoice.status_id),

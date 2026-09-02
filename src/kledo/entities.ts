@@ -27,6 +27,29 @@ const rawContactSchema = z
   })
   .passthrough()
 
+const rawSalesPersonSchema = z
+  .object({
+    id: exactIdSchema,
+    name: z.string(),
+  })
+  .passthrough()
+
+const rawTagSchema = z
+  .object({
+    id: exactIdSchema,
+    name: z.string(),
+  })
+  .passthrough()
+
+const rawSalesInvoiceMetadataSchema = z
+  .object({
+    sales_id: exactIdSchema.nullable().optional(),
+    sales: rawSalesPersonSchema.nullable().optional(),
+    sales_person: rawSalesPersonSchema.nullable().optional(),
+    tags: z.array(rawTagSchema).default([]),
+  })
+  .passthrough()
+
 const rawDocumentSchema = z
   .object({
     id: exactIdSchema,
@@ -364,6 +387,36 @@ function contactName(contact: z.infer<typeof rawContactSchema>): Record<string, 
   }
 }
 
+export function normalizeSalesInvoiceMetadata(value: unknown): Record<string, JsonValue> {
+  const metadata = rawSalesInvoiceMetadataSchema.parse(value)
+  return {
+    salesPerson:
+      metadata.sales_id === null ||
+      metadata.sales_id === undefined ||
+      metadata.sales === null ||
+      metadata.sales === undefined
+        ? null
+        : {
+            id: id(metadata.sales_id),
+            name: metadata.sales.name,
+          },
+    tags: metadata.tags.map((tag) => ({ id: id(tag.id), name: tag.name })),
+  }
+}
+
+function normalizeSalesInvoiceListMetadata(value: unknown): Record<string, JsonValue> {
+  const metadata = rawSalesInvoiceMetadataSchema.parse(value)
+  const salesperson = metadata.sales_person ?? metadata.sales
+  return {
+    salesPerson: salesperson
+      ? { id: id(salesperson.id), name: salesperson.name }
+      : metadata.sales_id === null || metadata.sales_id === undefined
+        ? null
+        : { id: id(metadata.sales_id), name: null },
+    tags: metadata.tags.map((tag) => ({ id: id(tag.id), name: tag.name })),
+  }
+}
+
 function normalizeDocument(entity: KledoEntity, value: unknown): Record<string, JsonValue> {
   const document = rawDocumentSchema.parse(value)
   const result: Record<string, JsonValue> = {
@@ -378,6 +431,9 @@ function normalizeDocument(entity: KledoEntity, value: unknown): Record<string, 
     statusId:
       document.status_id === null || document.status_id === undefined ? null : id(document.status_id),
     sourceUpdatedAt: document.updated_at ?? null,
+  }
+  if (entity === 'sales_invoice') {
+    Object.assign(result, normalizeSalesInvoiceListMetadata(value))
   }
   if (document.amount_after_tax !== null && document.amount_after_tax !== undefined) {
     result.total = normalizeMoney(document.amount_after_tax, document)
