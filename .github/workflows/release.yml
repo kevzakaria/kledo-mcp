@@ -254,7 +254,7 @@ jobs:
             echo 'Verified npm tarball is missing.' >&2
             exit 1
           fi
-          npm stage publish "${tarball}" --tag "${NPM_DIST_TAG}"
+          npm stage publish "${PWD}/${tarball}" --tag "${NPM_DIST_TAG}"
 
       - name: Write preparation summary
         env:
