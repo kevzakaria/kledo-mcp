@@ -9,6 +9,10 @@ curated wording below.
 
 ## [Unreleased]
 
+Nothing yet.
+
+## [0.2.0] - 2026-09-03
+
 ### Added
 
 - Added an optional tenant-scoped SQLite identity catalog with an explicit
@@ -29,6 +33,9 @@ curated wording below.
 - Added exact, bounded Document Number lookup to `kledo_get` for eight
   commercial document types while retaining numeric IDs as an internal fast
   path ([#9](https://github.com/kevzakaria/kledo-mcp/pull/9)).
+- Added a normalized `salesPerson` and sanitized `tags` to Sales Invoice query
+  and detail records, plus a `salesPersonId` filter and field projection for
+  both ([#12](https://github.com/kevzakaria/kledo-mcp/pull/12)).
 
 ### Changed
 
@@ -52,5 +59,6 @@ curated wording below.
   ([#1](https://github.com/kevzakaria/kledo-mcp/pull/1),
   [#2](https://github.com/kevzakaria/kledo-mcp/pull/2)).
 
-[Unreleased]: https://github.com/kevzakaria/kledo-mcp/compare/v0.1.0-rc.1...HEAD
+[Unreleased]: https://github.com/kevzakaria/kledo-mcp/compare/v0.2.0...HEAD
+[0.2.0]: https://github.com/kevzakaria/kledo-mcp/releases/tag/v0.2.0
 [0.1.0-rc.1]: https://github.com/kevzakaria/kledo-mcp/releases/tag/v0.1.0-rc.1
