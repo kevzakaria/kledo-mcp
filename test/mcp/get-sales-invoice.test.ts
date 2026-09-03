@@ -90,6 +90,19 @@ describe('kledo_get sales invoice', () => {
               npwp: 'private-tax-id',
               address: 'private address',
             },
+            sales_id: 352181,
+            sales: { id: 352181, name: 'Elmo Abu Abdillah' },
+            tags: [
+              {
+                id: 1,
+                name: 'Penjualan Material',
+                color: '#000000',
+                owner_id: 145707,
+                local_id: 'fixture-private-local-id',
+                is_archive: 0,
+                is_system_reserved: 0,
+              },
+            ],
             amount_after_tax: '1500000.00',
             due: '500000.00',
             currency_id: 2,
@@ -189,6 +202,8 @@ describe('kledo_get sales invoice', () => {
           companyName: 'PT Maju Jaya',
           personName: 'Alya',
         },
+        salesPerson: { id: '352181', name: 'Elmo Abu Abdillah' },
+        tags: [{ id: '1', name: 'Penjualan Material' }],
         memo: 'Routine installation',
         total: {
           amount: '1500000.00',

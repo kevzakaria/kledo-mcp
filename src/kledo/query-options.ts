@@ -40,7 +40,12 @@ const warehouseTransactions = new Set<KledoEntity>([
   'sales_quote',
   'purchase_quote',
 ])
-const salesTransactions = new Set<KledoEntity>(['sales_order', 'sales_delivery', 'sales_quote'])
+const salesTransactions = new Set<KledoEntity>([
+  'sales_invoice',
+  'sales_order',
+  'sales_delivery',
+  'sales_quote',
+])
 const dueDateTransactions = new Set<KledoEntity>([
   'sales_invoice',
   'purchase_invoice',
@@ -92,7 +97,7 @@ const commonDocumentFields = [
 ]
 
 const projectedFields: Record<KledoEntity, Set<string>> = {
-  sales_invoice: new Set(commonDocumentFields),
+  sales_invoice: new Set([...commonDocumentFields, 'salesPerson', 'tags']),
   purchase_invoice: new Set(commonDocumentFields),
   sales_order: new Set(commonDocumentFields),
   purchase_order: new Set(commonDocumentFields),
@@ -277,7 +282,7 @@ function applyFilter(input: KledoQueryInput, filter: Filter, url: URL): void {
     return
   }
   if (filter.field === 'salesPersonId' && salesTransactions.has(input.entity)) {
-    url.searchParams.set('sales_id', scalarIds(input, filter))
+    url.searchParams.set('sales_id', scalarIds(input, filter, input.entity === 'sales_invoice'))
     return
   }
   if (filter.field === 'bankAccountId' && input.entity === 'bank_transaction') {
