@@ -90,14 +90,14 @@ describe('kledo_get sales invoice', () => {
               npwp: 'private-tax-id',
               address: 'private address',
             },
-            sales_id: 352181,
-            sales: { id: 352181, name: 'Elmo Abu Abdillah' },
+            sales_id: 90001,
+            sales: { id: 90001, name: 'Sales Contoh Satu' },
             tags: [
               {
                 id: 1,
                 name: 'Penjualan Material',
                 color: '#000000',
-                owner_id: 145707,
+                owner_id: 90002,
                 local_id: 'fixture-private-local-id',
                 is_archive: 0,
                 is_system_reserved: 0,
@@ -202,7 +202,7 @@ describe('kledo_get sales invoice', () => {
           companyName: 'PT Maju Jaya',
           personName: 'Alya',
         },
-        salesPerson: { id: '352181', name: 'Elmo Abu Abdillah' },
+        salesPerson: { id: '90001', name: 'Sales Contoh Satu' },
         tags: [{ id: '1', name: 'Penjualan Material' }],
         memo: 'Routine installation',
         total: {
