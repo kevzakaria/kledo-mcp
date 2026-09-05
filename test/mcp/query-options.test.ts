@@ -35,14 +35,14 @@ describe('kledo_query options', () => {
                 trans_date: '2026-08-01',
                 due_date: '2026-08-31',
                 contact: { id: 44, name: 'Alya', company: 'PT Maju Jaya' },
-                sales_id: 352181,
-                sales: { id: 352181, name: 'Elmo Abu Abdillah' },
+                sales_id: 90001,
+                sales: { id: 90001, name: 'Sales Contoh Satu' },
                 tags: [
                   {
                     id: 1,
                     name: 'Penjualan Material',
                     color: '#000000',
-                    owner_id: 145707,
+                    owner_id: 90002,
                     local_id: 'fixture-private-local-id',
                     is_archive: 0,
                     is_system_reserved: 0,
@@ -92,7 +92,7 @@ describe('kledo_query options', () => {
         search: 'PT Maju Jaya',
         filters: [
           { field: 'contactId', op: 'eq', value: '44' },
-          { field: 'salesPersonId', op: 'eq', value: '352181' },
+          { field: 'salesPersonId', op: 'eq', value: '90001' },
           { field: 'statusId', op: 'eq', value: '1' },
           {
             field: 'transactionDate',
@@ -118,7 +118,7 @@ describe('kledo_query options', () => {
 
     expect(result.isError).not.toBe(true)
     expect(requestedUrls).toEqual([
-      '/api/v1/finance/invoices?search=PT+Maju+Jaya&contact_id=44&sales_id=352181&status_id=1&date_from=2026-08-01&date_to=2026-08-31&due_date_to=2026-09-30&amount_gte=1000.00&product_id=5%2C6&sort_by=trans_date&order_by=desc&per_page=5&page=1',
+      '/api/v1/finance/invoices?search=PT+Maju+Jaya&contact_id=44&sales_id=90001&status_id=1&date_from=2026-08-01&date_to=2026-08-31&due_date_to=2026-09-30&amount_gte=1000.00&product_id=5%2C6&sort_by=trans_date&order_by=desc&per_page=5&page=1',
     ])
     const structuredContent = result.structuredContent
     if (
@@ -137,7 +137,7 @@ describe('kledo_query options', () => {
       transactionDate: '2026-08-01',
       total: { amount: '1500000.00', currency: null },
       paymentState: 'partially_paid',
-      salesPerson: { id: '352181', name: 'Elmo Abu Abdillah' },
+      salesPerson: { id: '90001', name: 'Sales Contoh Satu' },
       tags: [{ id: '1', name: 'Penjualan Material' }],
     })
     expect(items[0]).not.toHaveProperty('party')
@@ -227,10 +227,10 @@ describe('kledo_query options', () => {
       {
         arguments: {
           entity: 'sales_invoice',
-          filters: [{ field: 'salesPersonId', op: 'in', value: ['352181', '352182'] }],
+          filters: [{ field: 'salesPersonId', op: 'in', value: ['90001', '352182'] }],
           pageSize: 2,
         },
-        url: '/api/v1/finance/invoices?sales_id=352181%2C352182&per_page=2&page=1',
+        url: '/api/v1/finance/invoices?sales_id=90001%2C352182&per_page=2&page=1',
       },
       {
         arguments: {

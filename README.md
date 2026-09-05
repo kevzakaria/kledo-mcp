@@ -180,6 +180,14 @@ Detailnya bisa dibaca di
 [panduan versioning resmi MCP](https://modelcontextprotocol.io/docs/2026-07-28/learn/versioning)
 dan [dokumen arsitektur repo](docs/architecture.md).
 
+## Rilis terbaru
+
+Riwayat lengkap ada di [CHANGELOG.md](CHANGELOG.md).
+
+- **0.3.0** (2026-09-05): `sales_order` query dan detail membawa `salesPerson` dan `tags` yang sudah dinormalisasi, dengan dukungan proyeksi ([#16](https://github.com/kevzakaria/kledo-mcp/pull/16)).
+- **0.2.0** (2026-09-03): `sales_invoice` membawa `salesPerson` dan `tags`, filter `salesPersonId` ([#12](https://github.com/kevzakaria/kledo-mcp/pull/12)); workflow rilis diperbaiki ([#14](https://github.com/kevzakaria/kledo-mcp/pull/14), [#15](https://github.com/kevzakaria/kledo-mcp/pull/15)).
+- **0.1.0-rc.1** (2026-08-27): rilis pratinjau pertama dengan tiga tool read-only.
+
 ## Dokumentasi
 
 | Panduan | Isi |
