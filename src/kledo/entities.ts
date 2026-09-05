@@ -41,7 +41,7 @@ const rawTagSchema = z
   })
   .passthrough()
 
-const rawSalesInvoiceMetadataSchema = z
+const rawSalesMetadataSchema = z
   .object({
     sales_id: exactIdSchema.nullable().optional(),
     sales: rawSalesPersonSchema.nullable().optional(),
@@ -388,7 +388,7 @@ function contactName(contact: z.infer<typeof rawContactSchema>): Record<string, 
 }
 
 export function normalizeSalesInvoiceMetadata(value: unknown): Record<string, JsonValue> {
-  const metadata = rawSalesInvoiceMetadataSchema.parse(value)
+  const metadata = rawSalesMetadataSchema.parse(value)
   return {
     salesPerson:
       metadata.sales_id === null ||
@@ -404,8 +404,8 @@ export function normalizeSalesInvoiceMetadata(value: unknown): Record<string, Js
   }
 }
 
-function normalizeSalesInvoiceListMetadata(value: unknown): Record<string, JsonValue> {
-  const metadata = rawSalesInvoiceMetadataSchema.parse(value)
+function normalizeSalesMetadata(value: unknown): Record<string, JsonValue> {
+  const metadata = rawSalesMetadataSchema.parse(value)
   const salesperson = metadata.sales_person ?? metadata.sales
   return {
     salesPerson: salesperson
@@ -415,6 +415,11 @@ function normalizeSalesInvoiceListMetadata(value: unknown): Record<string, JsonV
         : { id: id(metadata.sales_id), name: null },
     tags: metadata.tags.map((tag) => ({ id: id(tag.id), name: tag.name })),
   }
+}
+
+const documentsWithSalesMetadata: Partial<Record<KledoEntity, true>> = {
+  sales_invoice: true,
+  sales_order: true,
 }
 
 function normalizeDocument(entity: KledoEntity, value: unknown): Record<string, JsonValue> {
@@ -432,8 +437,8 @@ function normalizeDocument(entity: KledoEntity, value: unknown): Record<string, 
       document.status_id === null || document.status_id === undefined ? null : id(document.status_id),
     sourceUpdatedAt: document.updated_at ?? null,
   }
-  if (entity === 'sales_invoice') {
-    Object.assign(result, normalizeSalesInvoiceListMetadata(value))
+  if (documentsWithSalesMetadata[entity]) {
+    Object.assign(result, normalizeSalesMetadata(value))
   }
   if (document.amount_after_tax !== null && document.amount_after_tax !== undefined) {
     result.total = normalizeMoney(document.amount_after_tax, document)

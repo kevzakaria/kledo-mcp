@@ -2397,13 +2397,16 @@ export function createKledoHttpGateway(options: CreateKledoHttpGatewayOptions): 
         const selectedItems = extras.lineItems.slice(0, input.lineItemLimit)
         const omittedCount = extras.lineItems.length - selectedItems.length
 
+        const normalizedRecord = {
+          ...normalizeEntityItem(input.entity, envelope.data),
+          ...(input.entity === 'sales_order'
+            ? normalizeSalesInvoiceMetadata(envelope.data)
+            : {}),
+        }
+
         return {
           entity: input.entity,
-          record: projectFields(
-            input.entity,
-            input.fields,
-            normalizeEntityItem(input.entity, envelope.data),
-          ),
+          record: projectFields(input.entity, input.fields, normalizedRecord),
           ...(includes.has('line_items') ? { lineItems: selectedItems } : {}),
           ...(includes.has('relation_ids') ? { relations: extras.relations } : {}),
           truncation: {

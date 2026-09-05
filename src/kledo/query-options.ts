@@ -99,7 +99,7 @@ const commonDocumentFields = [
 const projectedFields: Record<KledoEntity, Set<string>> = {
   sales_invoice: new Set([...commonDocumentFields, 'salesPerson', 'tags']),
   purchase_invoice: new Set(commonDocumentFields),
-  sales_order: new Set(commonDocumentFields),
+  sales_order: new Set([...commonDocumentFields, 'salesPerson', 'tags']),
   purchase_order: new Set(commonDocumentFields),
   sales_delivery: new Set(commonDocumentFields),
   purchase_delivery: new Set(commonDocumentFields),

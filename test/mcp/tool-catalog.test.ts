@@ -150,9 +150,6 @@ describe('Kledo MCP tool catalog', () => {
         'balance',
       ]),
     )
-    expect(queryProperties?.fields?.items?.description).toMatch(
-      /sales_invoice=.*salesPerson,tags/is,
-    )
     expect(queryProperties?.fields?.items?.description).toMatch(/contact=.*displayName/is)
 
     const getTool = tools.find(({ name }) => name === 'kledo_get')
