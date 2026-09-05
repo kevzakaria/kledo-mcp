@@ -11,6 +11,14 @@ curated wording below.
 
 Nothing yet.
 
+## [0.3.0] - 2026-09-05
+
+### Added
+
+- Added the normalized `salesPerson` and sanitized `tags` fields to Sales
+  Order query and detail records, with projection support, matching the Sales
+  Invoice contract ([#16](https://github.com/kevzakaria/kledo-mcp/pull/16)).
+
 ## [0.2.0] - 2026-09-03
 
 ### Added
@@ -59,6 +67,7 @@ Nothing yet.
   ([#1](https://github.com/kevzakaria/kledo-mcp/pull/1),
   [#2](https://github.com/kevzakaria/kledo-mcp/pull/2)).
 
-[Unreleased]: https://github.com/kevzakaria/kledo-mcp/compare/v0.2.0...HEAD
+[Unreleased]: https://github.com/kevzakaria/kledo-mcp/compare/v0.3.0...HEAD
+[0.3.0]: https://github.com/kevzakaria/kledo-mcp/releases/tag/v0.3.0
 [0.2.0]: https://github.com/kevzakaria/kledo-mcp/releases/tag/v0.2.0
 [0.1.0-rc.1]: https://github.com/kevzakaria/kledo-mcp/releases/tag/v0.1.0-rc.1
