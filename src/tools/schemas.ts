@@ -158,8 +158,8 @@ const KLEDO_QUERY_SORT_COMPATIBILITY = [
 
 const KLEDO_QUERY_PROJECTION_COMPATIBILITY = [
   'Projection compatibility:',
-  'sales_invoice=reference,transactionDate,dueDate,shippingDate,party,memo,statusId,total,remaining,paymentState,unbilled,sourceUpdatedAt,bankAccount,transactionType,salesPerson,tags;',
-  'purchase_invoice,sales_order,purchase_order,sales_delivery,purchase_delivery,sales_quote,purchase_quote,bank_transaction,expense=reference,transactionDate,dueDate,shippingDate,party,memo,statusId,total,remaining,paymentState,unbilled,sourceUpdatedAt,bankAccount,transactionType;',
+  'sales_invoice,sales_order=reference,transactionDate,dueDate,shippingDate,party,memo,statusId,total,remaining,paymentState,unbilled,sourceUpdatedAt,bankAccount,transactionType,salesPerson,tags;',
+  'purchase_invoice,purchase_order,sales_delivery,purchase_delivery,sales_quote,purchase_quote,bank_transaction,expense=reference,transactionDate,dueDate,shippingDate,party,memo,statusId,total,remaining,paymentState,unbilled,sourceUpdatedAt,bankAccount,transactionType;',
   'contact=displayName,companyName,personName,groupId,typeIds,archived;',
   'product=code,name,category,canSell,canPurchase,tracked,basePrice,salePrice;',
   'account=code,name,category,balance,archived;',

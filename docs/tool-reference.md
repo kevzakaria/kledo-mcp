@@ -179,12 +179,19 @@ inspectable.
 | Warehouse | `warehouse` | Yes |
 | Unit | `unit` | No detail endpoint |
 
-Sales Invoice query and detail records include `salesPerson` (`id` plus a
-nullable `name`) and sanitized `tags` (`id` and `name` only). List records use
-a null salesperson name only when Kledo supplies `sales_id` without either
-salesperson object. `sales_invoice` queries accept
-`salesPersonId` with `eq` or `in`, mapped to Kledo's `sales_id` parameter.
-`salesPerson` and `tags` can also be selected through `fields`.
+Sales Invoice and Sales Order query and detail records include `salesPerson`
+(`id` plus a nullable `name`) and sanitized `tags` (`id` and `name` only; any
+other Kledo tag fields, such as color or ownership metadata, are stripped).
+List records use `sales_person`, falling back to `sales`, falling back to a
+null salesperson name when Kledo supplies `sales_id` without either
+salesperson object. Detail records use only `sales`; when `sales_id` is
+present without a `sales` object the detail `salesPerson` is `null` rather
+than a bare ID, matching the query and detail shapes Kledo returns for each
+endpoint. A malformed tag or salesperson object from Kledo fails the request
+with `SCHEMA_MISMATCH`, the same as any other unexpected field shape.
+`sales_invoice` and `sales_order` queries accept `salesPersonId` with `eq`
+(`sales_invoice` also accepts `in`), mapped to Kledo's `sales_id` parameter.
+`salesPerson` and `tags` can be selected through `fields` for both entities.
 
 ## Report catalog
 
