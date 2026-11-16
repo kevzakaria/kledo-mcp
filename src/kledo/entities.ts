@@ -1,6 +1,6 @@
 import { z } from 'zod'
 
-import { compareDecimals, decimalString } from '../domain/decimal.js'
+import { compareDecimals, decimalString, subtractDecimals } from '../domain/decimal.js'
 import {
   documentTypeForTransactionTypeId,
   isKledoCommercialDocumentType,
@@ -65,6 +65,7 @@ const rawDocumentSchema = z
     amount_after_tax: decimalSchema.nullable().optional(),
     due: decimalSchema.nullable().optional(),
     unbilled_amount: decimalSchema.nullable().optional(),
+    billed_amount: decimalSchema.nullable().optional(),
     memo: z.string().nullable().optional(),
     status_id: exactIdSchema.nullable().optional(),
     updated_at: z.string().nullable().optional(),
@@ -462,6 +463,21 @@ function normalizeDocument(entity: KledoEntity, value: unknown): Record<string, 
   }
   if (document.unbilled_amount !== null && document.unbilled_amount !== undefined) {
     result.unbilled = normalizeMoney(document.unbilled_amount, document)
+  } else if (
+    entity === 'sales_order' &&
+    document.amount_after_tax !== null &&
+    document.amount_after_tax !== undefined &&
+    document.billed_amount !== null &&
+    document.billed_amount !== undefined
+  ) {
+    // Order detail has no unbilled_amount; the list value equals total minus billed.
+    result.unbilled = normalizeMoney(
+      subtractDecimals(
+        decimalString(document.amount_after_tax),
+        decimalString(document.billed_amount),
+      ),
+      document,
+    )
   }
   if (document.bank_account) {
     result.bankAccount = {

@@ -47,3 +47,11 @@ export function addDecimals(left: string, right: string): string {
   const [leftValue, rightValue] = align(leftParts, rightParts)
   return decimalFromParts(leftValue + rightValue, scale)
 }
+
+export function subtractDecimals(left: string, right: string): string {
+  const leftParts = decimalParts(left)
+  const rightParts = decimalParts(right)
+  const scale = Math.max(leftParts.scale, rightParts.scale)
+  const [leftValue, rightValue] = align(leftParts, rightParts)
+  return decimalFromParts(leftValue - rightValue, scale)
+}
