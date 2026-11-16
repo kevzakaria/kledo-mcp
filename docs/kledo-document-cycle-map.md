@@ -82,7 +82,7 @@ Status IDs are entity-scoped and may be localized. Do not create one global
 | Total before tax | `amount` | Explicit before-tax amount where the contract exposes it |
 | Total after tax | `amount_after_tax` | `total` or a report-specific money field |
 | Remaining balance | `due` | `remaining` or report-specific outstanding money |
-| Unbilled value | `unbilled_amount` | Order backlog only; never receivable or revenue |
+| Unbilled value | `unbilled_amount` (list); `amount_after_tax - billed_amount` on Sales Order detail, which has no `unbilled_amount` | Order backlog only; never receivable or revenue. Detail `remaining_amount` can differ, so it is not used |
 | Currency | currency metadata returned by the endpoint | Explicit normalized money metadata; decimals remain strings |
 
 Kledo-originated `memo`, descriptions, tags, messages, names, and other business
