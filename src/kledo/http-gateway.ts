@@ -22,7 +22,7 @@ import {
   entityDefinitions,
   exactIdSchema,
   normalizeEntityItem,
-  normalizeSalesInvoiceMetadata,
+  normalizeSalesMetadata,
   normalizeMoney,
   normalizeTransactionExtras,
   transactionIncludeEntities,
@@ -720,7 +720,7 @@ function normalizedSalesInvoice(invoice: z.infer<typeof rawSalesInvoiceSchema>):
       companyName,
       personName,
     },
-    ...normalizeSalesInvoiceMetadata(invoice),
+    ...normalizeSalesMetadata(invoice),
     memo: invoice.memo,
     statusId:
       invoice.status_id === null || invoice.status_id === undefined ? null : String(invoice.status_id),
@@ -2400,7 +2400,7 @@ export function createKledoHttpGateway(options: CreateKledoHttpGatewayOptions): 
         const normalizedRecord = {
           ...normalizeEntityItem(input.entity, envelope.data),
           ...(input.entity === 'sales_order'
-            ? normalizeSalesInvoiceMetadata(envelope.data)
+            ? normalizeSalesMetadata(envelope.data)
             : {}),
         }
 
