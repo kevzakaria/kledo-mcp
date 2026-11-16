@@ -2300,7 +2300,7 @@ export function createKledoHttpGateway(options: CreateKledoHttpGatewayOptions): 
         const body = await requestJson(url, signal)
         const envelope = rawPurchaseInvoiceDetailEnvelopeSchema.parse(body)
         const invoice = envelope.data
-        const extras = normalizeTransactionExtras(input.entity, invoice)
+        const extras = normalizeTransactionExtras(invoice)
         const selectedItems = extras.lineItems.slice(0, input.lineItemLimit)
         const omittedCount = extras.lineItems.length - selectedItems.length
 
@@ -2392,7 +2392,7 @@ export function createKledoHttpGateway(options: CreateKledoHttpGatewayOptions): 
         const body = await requestJson(url, signal)
         const envelope = rawEntityDetailEnvelopeSchema.parse(body)
         const extras = transactionIncludeEntities.has(input.entity)
-          ? normalizeTransactionExtras(input.entity, envelope.data)
+          ? normalizeTransactionExtras(envelope.data)
           : { lineItems: [], relations: [] }
         const selectedItems = extras.lineItems.slice(0, input.lineItemLimit)
         const omittedCount = extras.lineItems.length - selectedItems.length

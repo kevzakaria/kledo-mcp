@@ -1,6 +1,10 @@
 import { z } from 'zod'
 
 import { compareDecimals, decimalString } from '../domain/decimal.js'
+import {
+  documentTypeForTransactionTypeId,
+  isKledoCommercialDocumentType,
+} from '../domain/document-lineage.js'
 import type { JsonValue } from '../domain/json.js'
 import type { KledoEntity } from '../tools/schemas.js'
 
@@ -549,10 +553,7 @@ export interface NormalizedTransactionExtras {
   relations: Array<{ relation: string; entity?: KledoEntity; id: string }>
 }
 
-export function normalizeTransactionExtras(
-  entity: KledoEntity,
-  value: unknown,
-): NormalizedTransactionExtras {
+export function normalizeTransactionExtras(value: unknown): NormalizedTransactionExtras {
   const detail = rawTransactionDetailExtrasSchema.parse(value)
   const lineItems = detail.items.map((item) => {
     const normalized: Record<string, JsonValue> = {
@@ -596,12 +597,12 @@ export function normalizeTransactionExtras(
   add(detail.order, 'sales_order')
   add(detail.purchase_order, 'purchase_order')
   add(detail.quote, 'sales_quote')
-  if (detail.parent_tran) {
-    const targetEntity: KledoEntity =
-      entity === 'purchase_invoice' || entity === 'purchase_delivery'
-        ? 'purchase_order'
-        : 'sales_order'
-    add(detail.parent_tran, targetEntity)
+  const parentTransactionTypeId = detail.parent_tran?.trans_type_id
+  if (parentTransactionTypeId !== null && parentTransactionTypeId !== undefined) {
+    const parentType = documentTypeForTransactionTypeId(String(parentTransactionTypeId))
+    if (parentType && isKledoCommercialDocumentType(parentType)) {
+      add(detail.parent_tran, parentType)
+    }
   }
 
   return { lineItems, relations }

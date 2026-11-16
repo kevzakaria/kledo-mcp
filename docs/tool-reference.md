@@ -33,7 +33,8 @@ For non-document entities, first use `kledo_query` to obtain a numeric ID. The
 `id` fast path also remains backward compatible for agents chaining MCP calls.
 Optional `line_items` and `relation_ids` includes are bounded. Relationships are
 returned only when already present in the detail response and are never followed
-recursively.
+recursively. The Immediate Parent type comes from Kledo's
+`parent_tran.trans_type_id`; an unknown or missing type is omitted, not guessed.
 
 For `sales_invoice` and `purchase_invoice`, `document_lineage` validates the
 anchor transaction type, reads the authoritative typed `relations[]`, and
