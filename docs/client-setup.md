@@ -128,7 +128,10 @@ npx @modelcontextprotocol/inspector --cli \
   --server kledo --method tools/list --strict --format json
 ```
 
-The result should list exactly `kledo_get`, `kledo_query`, and `kledo_report`.
+The result should list exactly `kledo_get`, `kledo_query`, and `kledo_report`,
+with no portability errors or warnings. Published schemas write nullable fields
+as `anyOf` and subschemas as objects, never as `type` arrays or bare booleans,
+because some clients read only those forms.
 Listing tools does not call Kledo. Actual tool calls may read tenant data, so
 use an authorized tenant and keep all output private.
 

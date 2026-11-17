@@ -22,6 +22,7 @@ import {
   kledoReportToolInputSchema,
   kledoReportOutputSchema,
 } from '../tools/schemas.js'
+import { withClientCompatibleJsonSchema } from '../tools/json-schema-compat.js'
 
 const READ_ONLY_ANNOTATIONS = {
   readOnlyHint: true,
@@ -173,8 +174,8 @@ export function createKledoMcpServer({ gateway }: CreateKledoMcpServerOptions): 
       title: 'Get Kledo record',
       description:
         `Retrieve one normalized Kledo record using exactly one locator: a human-visible exact documentNumber for QU, SO, DO, INV, PQ, PO, PD, or PI; or a numeric id already returned by Kledo MCP. A documentNumber is resolved through bounded live Kledo search, so the caller never needs to know Kledo's internal ID. Use after kledo_query for a selected non-document record, or call it directly when the user supplies one exact commercial Document Number and needs line items, relationship IDs, invoice lifecycle details, or the bounded printable PDF for one Sales Invoice. For sales_invoice, print_document returns safe metadata plus one embedded application/pdf resource while keeping Kledo's opaque locator internal. document_lineage returns typed QU -> SO -> DO predecessors; for purchase_invoice it returns typed PQ -> PO -> PD predecessors. payment_events joins typed Invoice Payment or Purchase Payment relations to compact transaction facts. Sales payments come from the dedicated transactions endpoint; purchase payments are embedded in Purchase Invoice detail. The legacy invoice_payments include remains sales-only and returns Kledo type 17. Every payment transactionDate is that direct event date, not proof of final settlement. ${UNTRUSTED_DATA_WARNING}`,
-      inputSchema: kledoGetInputSchema,
-      outputSchema: kledoGetOutputSchema,
+      inputSchema: withClientCompatibleJsonSchema(kledoGetInputSchema),
+      outputSchema: withClientCompatibleJsonSchema(kledoGetOutputSchema),
       annotations: READ_ONLY_ANNOTATIONS,
     },
     async (input, context) =>
@@ -187,8 +188,8 @@ export function createKledoMcpServer({ gateway }: CreateKledoMcpServerOptions): 
       title: 'Query Kledo records',
       description:
         `Search or list normalized records from one allowlisted Kledo entity. Use the canonical filter, sort, and projection vocabularies documented in the input schema; incompatible entity-field combinations fail before Kledo is called. ${KLEDO_QUERY_FILTER_COMPATIBILITY} Use the opaque cursor for continuation. This tool is read-only and cannot change the tenant, URL, credentials, or upstream HTTP method. ${UNTRUSTED_DATA_WARNING}`,
-      inputSchema: kledoQueryInputSchema,
-      outputSchema: kledoQueryOutputSchema,
+      inputSchema: withClientCompatibleJsonSchema(kledoQueryInputSchema),
+      outputSchema: withClientCompatibleJsonSchema(kledoQueryOutputSchema),
       annotations: READ_ONLY_ANNOTATIONS,
     },
     async (input, context) =>
@@ -201,8 +202,8 @@ export function createKledoMcpServer({ gateway }: CreateKledoMcpServerOptions): 
       title: 'Run Kledo report',
       description:
         `Run one allowlisted native Kledo financial or operational report, or an explicitly validated semantic adapter. Use sales_by_person for sales grouped by or filtered to a salesperson; it defaults to transaction date and resolves an exact salesperson name through Kledo users within the same MCP call. Use sales_order_kpi for bounded Sales Order deal intake by period and optional salesperson; its booked values are not revenue, invoices, or cash. Use income_by_customer only to group or rank customers, including when filtered by a salesperson. Use dormant_customers for bounded follow-up candidates with historical income but no recent income activity; it is not proof of churn and does not provide an exact last-purchase date. Use receivable_by_invoice when the answer needs customer totals, invoice numbers, and project/reference: it exposes Kledo API memo as projectReference and fully consumes each returned customer's invoice drill-down. Use item_price_analysis to keep catalog prices, latest transaction prices, and period profitability distinct; when a product name matches multiple products, retry with the exact productCode or SKU. Use sales_by_period only for time buckets. Prefer this tool for company totals, statements, receivables, payables, and period comparisons; do not reconstruct salesperson sales or accounting statements from queried invoices. ${UNTRUSTED_DATA_WARNING}`,
-      inputSchema: kledoReportToolInputSchema,
-      outputSchema: kledoReportOutputSchema,
+      inputSchema: withClientCompatibleJsonSchema(kledoReportToolInputSchema),
+      outputSchema: withClientCompatibleJsonSchema(kledoReportOutputSchema),
       annotations: READ_ONLY_ANNOTATIONS,
     },
     async (input, context) =>
