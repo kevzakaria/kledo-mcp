@@ -21,6 +21,7 @@ import {
   decimalSchema,
   entityDefinitions,
   exactIdSchema,
+  lineItemsNeedUnitNames,
   normalizeEntityItem,
   normalizeMoney,
   normalizeTransactionExtras,
@@ -1340,6 +1341,7 @@ export function createKledoHttpGateway(options: CreateKledoHttpGatewayOptions): 
   let salespersonCache:
     | { expiresAt: number; users: readonly CachedIdentity[] }
     | undefined
+  let unitNameCache: { expiresAt: number; names: ReadonlyMap<string, string> } | undefined
 
   const maxRetryWaitMs = 5_000
   const retryDelay = (response: Response, attempt: number): number | null => {
@@ -1758,6 +1760,23 @@ export function createKledoHttpGateway(options: CreateKledoHttpGatewayOptions): 
     signal?: AbortSignal,
   ): Promise<readonly CachedIdentity[]> =>
     namedIdentities(await fetchPaginatedIdentityRows(path, signal), activeFrom)
+
+  // Line items name their unit only by `unit_id`; the names come from the unit
+  // catalog, fetched once per cache period and only when a line item needs it.
+  const unitNamesForLineItems = async (
+    detail: unknown,
+    signal?: AbortSignal,
+  ): Promise<ReadonlyMap<string, string> | undefined> => {
+    if (!lineItemsNeedUnitNames(detail)) return undefined
+    const cacheNow = now().getTime()
+    if (unitNameCache && unitNameCache.expiresAt > cacheNow) return unitNameCache.names
+    const units = await fetchNamedPaginatedCatalog('finance/units', 'deleted', signal)
+    unitNameCache = {
+      expiresAt: cacheNow + salespersonCacheTtlMs,
+      names: new Map(units.map((unit) => [unit.id, unit.name])),
+    }
+    return unitNameCache.names
+  }
 
   const fetchNamedArrayCatalog = async (
     path: string,
@@ -2249,7 +2268,10 @@ export function createKledoHttpGateway(options: CreateKledoHttpGatewayOptions): 
         const body = await requestJson(url, signal)
         const envelope = rawPurchaseInvoiceDetailEnvelopeSchema.parse(body)
         const invoice = envelope.data
-        const extras = normalizeTransactionExtras(invoice)
+        const extras = normalizeTransactionExtras(
+          invoice,
+          includes.has('line_items') ? await unitNamesForLineItems(invoice, signal) : undefined,
+        )
         const selectedItems = extras.lineItems.slice(0, input.lineItemLimit)
         const omittedCount = extras.lineItems.length - selectedItems.length
 
@@ -2341,7 +2363,12 @@ export function createKledoHttpGateway(options: CreateKledoHttpGatewayOptions): 
         const body = await requestJson(url, signal)
         const envelope = rawEntityDetailEnvelopeSchema.parse(body)
         const extras = transactionIncludeEntities.has(input.entity)
-          ? normalizeTransactionExtras(envelope.data)
+          ? normalizeTransactionExtras(
+              envelope.data,
+              includes.has('line_items')
+                ? await unitNamesForLineItems(envelope.data, signal)
+                : undefined,
+            )
           : { lineItems: [], relations: [] }
         const selectedItems = extras.lineItems.slice(0, input.lineItemLimit)
         const omittedCount = extras.lineItems.length - selectedItems.length
@@ -2372,7 +2399,10 @@ export function createKledoHttpGateway(options: CreateKledoHttpGatewayOptions): 
 
       const envelope = rawSalesInvoiceDetailEnvelopeSchema.parse(body)
       const invoice = envelope.data
-      const allLineItems = normalizeTransactionExtras(invoice).lineItems
+      const allLineItems = normalizeTransactionExtras(
+        invoice,
+        includes.has('line_items') ? await unitNamesForLineItems(invoice, signal) : undefined,
+      ).lineItems
       const lineItems = allLineItems.slice(0, input.lineItemLimit)
       const omittedCount = allLineItems.length - lineItems.length
       let parentEntity: SalesInvoicePredecessorType = 'sales_order'
