@@ -11,6 +11,31 @@ curated wording below.
 
 Nothing yet.
 
+## [0.4.0] - 2026-11-17
+
+This release makes Sales Order and Sales Invoice records consistent between
+`kledo_query` and `kledo_get`. Some fields change shape, so clients that read
+`salesPerson`, line items, or relation types should check the notes below.
+
+### Changed
+
+- `kledo_query` and `kledo_get` now return the same record for a Sales Invoice
+  or Sales Order. Sales Invoice line items now include `unit`, and every line
+  item returns `taxRate: null` when the line has no tax, instead of omitting
+  the key ([#27](https://github.com/kevzakaria/kledo-mcp/pull/27)).
+- `salesPerson` on Sales Orders and Sales Invoices now follows `sales_id` in
+  both tools, and is `null` when Kledo has no matching user, instead of a name
+  copied from another row ([#26](https://github.com/kevzakaria/kledo-mcp/pull/26)).
+
+### Fixed
+
+- `kledo_get` now returns `unbilled` for Sales Orders, derived from the billed
+  amount in the detail response, so it matches `kledo_query`
+  ([#25](https://github.com/kevzakaria/kledo-mcp/pull/25)).
+- `kledo_get` relation IDs now label a Sales Order or Purchase Order created
+  from a quote as derived from that quote, and no longer guess a parent type
+  Kledo did not send ([#24](https://github.com/kevzakaria/kledo-mcp/pull/24)).
+
 ## [0.3.0] - 2026-09-05
 
 ### Added
@@ -67,7 +92,8 @@ Nothing yet.
   ([#1](https://github.com/kevzakaria/kledo-mcp/pull/1),
   [#2](https://github.com/kevzakaria/kledo-mcp/pull/2)).
 
-[Unreleased]: https://github.com/kevzakaria/kledo-mcp/compare/v0.3.0...HEAD
+[Unreleased]: https://github.com/kevzakaria/kledo-mcp/compare/v0.4.0...HEAD
+[0.4.0]: https://github.com/kevzakaria/kledo-mcp/releases/tag/v0.4.0
 [0.3.0]: https://github.com/kevzakaria/kledo-mcp/releases/tag/v0.3.0
 [0.2.0]: https://github.com/kevzakaria/kledo-mcp/releases/tag/v0.2.0
 [0.1.0-rc.1]: https://github.com/kevzakaria/kledo-mcp/releases/tag/v0.1.0-rc.1

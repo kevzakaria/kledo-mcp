@@ -184,6 +184,7 @@ dan [dokumen arsitektur repo](docs/architecture.md).
 
 Riwayat lengkap ada di [CHANGELOG.md](CHANGELOG.md).
 
+- **0.4.0** (2026-11-17): record Sales Order dan Sales Invoice sama persis antara `kledo_query` dan `kledo_get`; `salesPerson` mengikuti `sales_id`, line item selalu punya `unit` dan `taxRate`, `unbilled` di detail Sales Order, dan tipe induk dokumen tidak lagi ditebak ([#24](https://github.com/kevzakaria/kledo-mcp/pull/24) sampai [#27](https://github.com/kevzakaria/kledo-mcp/pull/27)).
 - **0.3.0** (2026-09-05): `sales_order` query dan detail membawa `salesPerson` dan `tags` yang sudah dinormalisasi, dengan dukungan proyeksi ([#16](https://github.com/kevzakaria/kledo-mcp/pull/16)).
 - **0.2.0** (2026-09-03): `sales_invoice` membawa `salesPerson` dan `tags`, filter `salesPersonId` ([#12](https://github.com/kevzakaria/kledo-mcp/pull/12)); workflow rilis diperbaiki ([#14](https://github.com/kevzakaria/kledo-mcp/pull/14), [#15](https://github.com/kevzakaria/kledo-mcp/pull/15)).
 - **0.1.0-rc.1** (2026-08-27): rilis pratinjau pertama dengan tiga tool read-only.
