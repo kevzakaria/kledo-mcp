@@ -131,6 +131,7 @@ const rawGenericLineItemSchema = z
     desc: z.string().nullable().optional(),
     qty: decimalSchema,
     unit_name: z.string().nullable().optional(),
+    unit_id: exactIdSchema.nullable().optional(),
     price: decimalSchema.nullable().optional(),
     subtotal: decimalSchema.nullable().optional(),
     amount_after_tax: decimalSchema.nullable().optional(),
@@ -558,14 +559,32 @@ export interface NormalizedTransactionExtras {
   relations: Array<{ relation: string; entity?: KledoEntity; id: string }>
 }
 
-export function normalizeTransactionExtras(value: unknown): NormalizedTransactionExtras {
+/**
+ * True when a line item carries only `unit_id`, so its unit name has to come
+ * from Kledo's unit catalog. Detail responses send `unit_id` without a name.
+ */
+export function lineItemsNeedUnitNames(value: unknown): boolean {
+  const detail = rawTransactionDetailExtrasSchema.parse(value)
+  return detail.items.some(
+    (item) => !item.unit_name && item.unit_id !== null && item.unit_id !== undefined,
+  )
+}
+
+export function normalizeTransactionExtras(
+  value: unknown,
+  unitNames?: ReadonlyMap<string, string>,
+): NormalizedTransactionExtras {
   const detail = rawTransactionDetailExtrasSchema.parse(value)
   const lineItems = detail.items.map((item) => {
     const normalized: Record<string, JsonValue> = {
       id: item.id === null || item.id === undefined ? null : id(item.id),
       description: item.desc ?? null,
       quantity: decimalString(item.qty),
-      unit: item.unit_name ?? null,
+      unit:
+        item.unit_name ||
+        (item.unit_id === null || item.unit_id === undefined
+          ? null
+          : (unitNames?.get(id(item.unit_id)) ?? null)),
       product: item.product
         ? { id: id(item.product.id), code: item.product.code ?? null, name: item.product.name }
         : null,
