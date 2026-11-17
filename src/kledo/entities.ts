@@ -398,8 +398,16 @@ function contactName(contact: z.infer<typeof rawContactSchema>): Record<string, 
  * shows it. A list `sales_person` or detail `sales` object counts only when its
  * id equals `sales_id`: Kledo's list fills `sales_person` from the previous row
  * when `sales_id` has no matching user. No match means no salesperson (null).
+ *
+ * The name is the user's current name when `currentUserNames` knows the id.
+ * Kledo's list keeps the name a user had when the document was made, while the
+ * detail carries the current name, so a renamed user would otherwise get two
+ * names for one document.
  */
-function normalizeSalesMetadata(value: unknown): Record<string, JsonValue> {
+function normalizeSalesMetadata(
+  value: unknown,
+  currentUserNames?: ReadonlyMap<string, string>,
+): Record<string, JsonValue> {
   const metadata = rawSalesMetadataSchema.parse(value)
   const salesId =
     metadata.sales_id === null || metadata.sales_id === undefined ? null : id(metadata.sales_id)
@@ -407,7 +415,10 @@ function normalizeSalesMetadata(value: unknown): Record<string, JsonValue> {
     (candidate) => candidate !== null && candidate !== undefined && id(candidate.id) === salesId,
   )
   return {
-    salesPerson: salesperson && salesId !== null ? { id: salesId, name: salesperson.name } : null,
+    salesPerson:
+      salesperson && salesId !== null
+        ? { id: salesId, name: currentUserNames?.get(salesId) ?? salesperson.name }
+        : null,
     tags: metadata.tags.map((tag) => ({ id: id(tag.id), name: tag.name })),
   }
 }
@@ -417,7 +428,30 @@ const documentsWithSalesMetadata: Partial<Record<KledoEntity, true>> = {
   sales_order: true,
 }
 
-function normalizeDocument(entity: KledoEntity, value: unknown): Record<string, JsonValue> {
+/** True when any document names a salesperson whose current name may differ. */
+export function documentsNeedSalespersonNames(
+  entity: KledoEntity,
+  values: readonly unknown[],
+): boolean {
+  if (!documentsWithSalesMetadata[entity]) return false
+  return values.some((value) => {
+    const metadata = rawSalesMetadataSchema.safeParse(value)
+    if (!metadata.success) return false
+    const salesId = metadata.data.sales_id
+    return salesId !== null && salesId !== undefined
+  })
+}
+
+export type NormalizeEntityOptions = {
+  /** Current Kledo user names by id, used to name the salesperson. */
+  currentUserNames?: ReadonlyMap<string, string>
+}
+
+function normalizeDocument(
+  entity: KledoEntity,
+  value: unknown,
+  options: NormalizeEntityOptions = {},
+): Record<string, JsonValue> {
   const document = rawDocumentSchema.parse(value)
   const result: Record<string, JsonValue> = {
     kind: entity,
@@ -433,7 +467,7 @@ function normalizeDocument(entity: KledoEntity, value: unknown): Record<string, 
     sourceUpdatedAt: document.updated_at ?? null,
   }
   if (documentsWithSalesMetadata[entity]) {
-    Object.assign(result, normalizeSalesMetadata(value))
+    Object.assign(result, normalizeSalesMetadata(value, options.currentUserNames))
   }
   if (document.amount_after_tax !== null && document.amount_after_tax !== undefined) {
     result.total = normalizeMoney(document.amount_after_tax, document)
@@ -484,6 +518,7 @@ function normalizeDocument(entity: KledoEntity, value: unknown): Record<string, 
 export function normalizeEntityItem(
   entity: KledoEntity,
   value: unknown,
+  options: NormalizeEntityOptions = {},
 ): Record<string, JsonValue> {
   switch (entity) {
     case 'contact': {
@@ -550,7 +585,7 @@ export function normalizeEntityItem(
       }
     }
     default:
-      return normalizeDocument(entity, value)
+      return normalizeDocument(entity, value, options)
   }
 }
 
