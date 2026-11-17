@@ -17,6 +17,13 @@ describe('kledo_query sales invoices', () => {
 
   it('returns a normalized, bounded page from a real Kledo list envelope', async () => {
     const upstream = createServer((request, response) => {
+      if (request.url === '/api/v1/users') {
+        response.setHeader('content-type', 'application/json')
+        response.end(
+          JSON.stringify({ success: true, data: [{ id: 90001, name: 'Sales Contoh Satu' }] }),
+        )
+        return
+      }
       if (
         request.url !== '/api/v1/finance/invoices?per_page=2&page=1' ||
         request.headers.authorization !== 'Bearer fixture-secret'
