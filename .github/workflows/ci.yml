@@ -16,9 +16,12 @@ on:
 permissions:
   contents: read
 
+# A new commit cancels the stale run for the same ref. Runs started by PR
+# metadata events (opened, edited, labeled) queue instead, so a cancelled run
+# never blocks the required check.
 concurrency:
   group: ci-${{ github.workflow }}-${{ github.ref }}
-  cancel-in-progress: true
+  cancel-in-progress: ${{ github.event_name == 'push' || github.event.action == 'synchronize' }}
 
 jobs:
   verify:
