@@ -398,7 +398,7 @@ function contactName(contact: z.infer<typeof rawContactSchema>): Record<string, 
  * id equals `sales_id`: Kledo's list fills `sales_person` from the previous row
  * when `sales_id` has no matching user. No match means no salesperson (null).
  */
-export function normalizeSalesMetadata(value: unknown): Record<string, JsonValue> {
+function normalizeSalesMetadata(value: unknown): Record<string, JsonValue> {
   const metadata = rawSalesMetadataSchema.parse(value)
   const salesId =
     metadata.sales_id === null || metadata.sales_id === undefined ? null : id(metadata.sales_id)
@@ -582,13 +582,13 @@ export function normalizeTransactionExtras(value: unknown): NormalizedTransactio
     if (item.tax !== null && item.tax !== undefined) {
       normalized.tax = normalizeMoney(item.tax, item, detail)
     }
-    if (item.item_tax) {
-      normalized.taxRate = {
-        id: id(item.item_tax.id),
-        name: item.item_tax.name,
-        percent: decimalString(item.item_tax.percent),
-      }
-    }
+    normalized.taxRate = item.item_tax
+      ? {
+          id: id(item.item_tax.id),
+          name: item.item_tax.name,
+          percent: decimalString(item.item_tax.percent),
+        }
+      : null
     return normalized
   })
 

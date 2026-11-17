@@ -225,6 +225,7 @@ describe('kledo_get sales invoice', () => {
           id: '501',
           description: 'Service item',
           quantity: '2.0000',
+          unit: null,
           unitPrice: {
             amount: '500000.00',
             currency: 'USD',
