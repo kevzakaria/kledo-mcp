@@ -41,7 +41,10 @@ A commercial document comes back as the same record from `kledo_query` and
 money fields, and `paymentState` for both tools. Every `line_items` entry has
 one shape on every document type: `id`, `description`, `quantity`, `unit`,
 `product`, money fields when Kledo sends them, and `taxRate`, which is `null`
-for an untaxed line.
+for an untaxed line. Kledo sends a line's unit as `unit_id` only, so `unit` is
+named from Kledo's unit catalog. The catalog is read only when `line_items` is
+requested and a line needs it, then kept for five minutes; `unit` is `null` when
+the line has no unit or the unit is not in the catalog.
 
 For `sales_invoice` and `purchase_invoice`, `document_lineage` validates the
 anchor transaction type, reads the authoritative typed `relations[]`, and
