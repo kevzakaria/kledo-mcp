@@ -320,6 +320,87 @@ describe('kledo_get Sales Invoice document lineage', () => {
     })
   })
 
+  async function lineageFor(detail: Record<string, unknown>) {
+    const client = await connectClient((_request, response) => {
+      response.setHeader('content-type', 'application/json')
+      response.end(JSON.stringify({ success: true, data: detail }))
+    })
+    const result = await client.callTool({
+      name: 'kledo_get',
+      arguments: { entity: 'sales_invoice', id: '500', include: ['document_lineage'] },
+    })
+    expect(result.isError, JSON.stringify(result)).not.toBe(true)
+    const { documentLineage } = result.structuredContent as {
+      documentLineage: { predecessors: Array<{ documentType: string; id: string }> }
+    }
+    return documentLineage.predecessors.map(({ documentType, id }) => `${documentType}:${id}`)
+  }
+
+  const siblingDelivery = {
+    id: 301,
+    ref_number: 'DO/FIXTURE/301',
+    trans_type_id: 7,
+    trans_date: '2026-08-18',
+    business_tran_id: 200,
+  }
+
+  it('skips sibling deliveries of the Sales Order that delivery_ids does not name', async () => {
+    const predecessors = await lineageFor({
+      ...salesInvoiceDetailFixture,
+      delivery_ids: [300],
+      relations: [...salesInvoiceDetailFixture.relations, siblingDelivery],
+    })
+
+    expect(predecessors).toEqual(['sales_quote:100', 'sales_order:200', 'sales_delivery:300'])
+  })
+
+  it('keeps every delivery an invoice was made from', async () => {
+    const predecessors = await lineageFor({
+      ...salesInvoiceDetailFixture,
+      delivery_ids: '[300, 301]',
+      relations: [
+        ...salesInvoiceDetailFixture.relations,
+        siblingDelivery,
+        { ...siblingDelivery, id: 302, ref_number: 'DO/FIXTURE/302' },
+      ],
+    })
+
+    expect(predecessors).toEqual([
+      'sales_quote:100',
+      'sales_order:200',
+      'sales_delivery:300',
+      'sales_delivery:301',
+    ])
+  })
+
+  it('keeps the immediate parent delivery and every delivery relation without delivery_ids', async () => {
+    const withoutParentId = await lineageFor({
+      ...salesInvoiceDetailFixture,
+      delivery_ids: [301],
+      relations: [...salesInvoiceDetailFixture.relations, siblingDelivery],
+    })
+    expect(withoutParentId).toEqual([
+      'sales_quote:100',
+      'sales_order:200',
+      'sales_delivery:300',
+      'sales_delivery:301',
+    ])
+
+    for (const deliveryIds of [null, undefined, 'not json', [{}]]) {
+      const unfiltered = await lineageFor({
+        ...salesInvoiceDetailFixture,
+        delivery_ids: deliveryIds,
+        relations: [...salesInvoiceDetailFixture.relations, siblingDelivery],
+      })
+      expect(unfiltered).toEqual([
+        'sales_quote:100',
+        'sales_order:200',
+        'sales_delivery:300',
+        'sales_delivery:301',
+      ])
+    }
+  })
+
   it('fails closed when the immediate parent is absent from authoritative relations', async () => {
     const client = await connectClient((_request, response) => {
       response.setHeader('content-type', 'application/json')

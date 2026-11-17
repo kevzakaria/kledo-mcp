@@ -58,7 +58,11 @@ position or numeric ordering. The `lineageLimit` defaults to 50 and is capped
 at 200; truncation is explicit and sets `documentLineage.complete` to false.
 Relations outside that chain, such as payments, down payments, debt payments
 and returns, are skipped by the lineage; a predecessor relation without a
-document number fails safely.
+document number fails safely. Kledo also lists, in a Sales Invoice's
+`relations[]`, other deliveries of the same Sales Order that were billed on
+other invoices. When the invoice has `delivery_ids`, the lineage keeps only
+the deliveries named there plus the immediate parent; without `delivery_ids`
+every delivery relation is kept.
 
 The `payment_events` include joins typed payment relations, which carry the
 document number (`null` when Kledo has none, as on some older payments), to
