@@ -76,11 +76,11 @@
     "start": "node dist/bin/stdio.js"
   },
   "dependencies": {
-    "@modelcontextprotocol/server": "2.0.0",
+    "@modelcontextprotocol/server": "2.4.0",
     "zod": "4.4.3"
   },
   "devDependencies": {
-    "@modelcontextprotocol/client": "2.0.0",
+    "@modelcontextprotocol/client": "2.4.0",
     "@modelcontextprotocol/inspector": "2.4.0",
     "@types/node": "22.20.1",
     "typescript": "6.0.3",
