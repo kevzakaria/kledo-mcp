@@ -109,6 +109,13 @@ The adapter uses these sources in descending order of purpose:
 5. `business_tran_id` may connect a child to a source, but the target still
    requires an explicit transaction type.
 
+A Sales Invoice's `relations[]` can also hold sibling deliveries: other Sales
+Deliveries of the same Sales Order that were billed on different invoices.
+`delivery_ids` names the deliveries the invoice was made from (an id array on
+the detail, a JSON string such as `"[123, 456]"` on the list, `null` when the
+invoice came straight from an order). The adapter keeps only those delivery
+relations, plus the `parent_tran` delivery.
+
 Never map `parent_tran` to a fixed entity based only on the child entity. A
 Sales Invoice may have a Sales Delivery as its immediate parent, while a
 Purchase Invoice may have a Purchase Delivery as its immediate parent.

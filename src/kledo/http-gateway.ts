@@ -127,11 +127,28 @@ const rawDocumentRelationSchema = z
   })
   .passthrough()
 
+// Kledo sends delivery_ids as an id array on the invoice detail and as a JSON
+// string on the invoice list; both shapes are accepted here. Any other shape is
+// treated as absent, so lineage falls back to every delivery relation instead of
+// failing the whole invoice read.
+const rawDeliveryIdsSchema = z.preprocess(
+  (value) => {
+    if (typeof value !== 'string') return value
+    try {
+      return JSON.parse(value) as unknown
+    } catch {
+      return value
+    }
+  },
+  z.array(exactIdSchema).nullable().optional().catch(undefined),
+)
+
 const rawSalesInvoiceDetailSchema = rawSalesInvoiceSchema.extend({
   trans_type_id: exactIdSchema.nullable().optional(),
   print_url: z.string().trim().min(1).max(2048).nullable().optional(),
   items: z.array(rawSalesInvoiceLineItemSchema).default([]),
   relations: z.array(rawDocumentRelationSchema).default([]),
+  delivery_ids: rawDeliveryIdsSchema,
   parent_tran: z
     .object({
       id: exactIdSchema,
@@ -837,12 +854,34 @@ function normalizedSalesInvoiceLineage(invoice: SalesInvoiceDetail, lineageLimit
       number: string
     }
   >()
+  // Kledo lists every delivery of the same Sales Order in relations[], including
+  // deliveries billed on other invoices. delivery_ids names the deliveries this
+  // invoice was made from, so when Kledo sends it, other deliveries are skipped.
+  // The immediate parent is always kept.
+  const deliveryTransactionTypeId = transactionTypeIdByDocumentType.sales_delivery
+  const billedDeliveryIds = invoice.delivery_ids
+    ? new Set(invoice.delivery_ids.map(String))
+    : null
+  if (
+    billedDeliveryIds &&
+    invoice.parent_tran &&
+    String(invoice.parent_tran.trans_type_id) === deliveryTransactionTypeId
+  ) {
+    billedDeliveryIds.add(String(invoice.parent_tran.id))
+  }
   for (const relation of invoice.relations) {
     const transactionTypeId = String(relation.trans_type_id)
     const documentType = documentTypeForTransactionTypeId(transactionTypeId)
     // Payments, down payments, returns and other relation types are not part of
     // the predecessor chain; payments are read separately as payment events.
     if (!isSalesInvoicePredecessorType(documentType)) continue
+    if (
+      billedDeliveryIds &&
+      transactionTypeId === deliveryTransactionTypeId &&
+      !billedDeliveryIds.has(String(relation.id))
+    ) {
+      continue
+    }
     if (relation.ref_number === null) {
       throw new KledoError(
         'SCHEMA_MISMATCH',
