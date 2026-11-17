@@ -19,6 +19,13 @@ describe('kledo_query options', () => {
     const requestedUrls: string[] = []
     const upstream = createServer((request, response) => {
       requestedUrls.push(request.url ?? '')
+      if (request.url === '/api/v1/users') {
+        response.setHeader('content-type', 'application/json')
+        response.end(
+          JSON.stringify({ success: true, data: [{ id: 90001, name: 'Sales Contoh Satu' }] }),
+        )
+        return
+      }
       response.setHeader('content-type', 'application/json')
       response.end(
         JSON.stringify({
@@ -119,6 +126,7 @@ describe('kledo_query options', () => {
     expect(result.isError).not.toBe(true)
     expect(requestedUrls).toEqual([
       '/api/v1/finance/invoices?search=PT+Maju+Jaya&contact_id=44&sales_id=90001&status_id=1&date_from=2026-08-01&date_to=2026-08-31&due_date_to=2026-09-30&amount_gte=1000.00&product_id=5%2C6&sort_by=trans_date&order_by=desc&per_page=5&page=1',
+      '/api/v1/users',
     ])
     const structuredContent = result.structuredContent
     if (

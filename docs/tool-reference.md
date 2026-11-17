@@ -39,8 +39,9 @@ recursively. The Immediate Parent type comes from Kledo's
 A commercial document comes back as the same record from `kledo_query` and
 `kledo_get`: one normalizer builds the header, Party, `salesPerson`, tags,
 money fields, and `paymentState` for both tools. Where Kledo's list and detail
-responses themselves differ (a renamed salesperson, `sourceUpdatedAt`), the
-difference is listed after the Entity catalog table below. Every `line_items` entry has
+responses themselves differ (a salesperson whose user is no longer listed,
+`sourceUpdatedAt`), the difference is listed after the Entity catalog table
+below. Every `line_items` entry has
 one shape on every document type: `id`, `description`, `quantity`, `unit`,
 `product`, money fields when Kledo sends them, and `taxRate`, which is `null`
 for an untaxed line. Kledo sends a line's unit as `unit_id` only, so `unit` is
@@ -203,10 +204,12 @@ Sales Invoice and Sales Order query and detail records include `salesPerson`
 other Kledo tag fields, such as color or ownership metadata, are stripped).
 The salesperson is the user behind `sales_id`: the list `sales_person` or
 detail `sales` object counts only when its `id` equals `sales_id`, and no match
-means `salesPerson` is `null`. Two differences come from Kledo itself and are
-kept as Kledo shows them (see #34): the list keeps the name a user had when the
-invoice was made while the detail carries the current name, so a renamed user
-can appear under different names in `kledo_query` and `kledo_get`; and for a
+means `salesPerson` is `null`. The name is the user's current name in both
+tools. Kledo's list keeps the name a user had when the document was made, so
+`kledo_query` reads Kledo's user list (once, then cached for five minutes) to
+name a renamed user the way the detail does. It skips that read when `fields`
+leaves out `salesPerson`; if the user list cannot be read, the query keeps the
+list name and adds a warning. One difference from Kledo remains: for a
 `sales_id` whose user is no longer listed, the query record can be `null` while
 the detail names the salesperson. Detail records have no `updated_at`, so
 `sourceUpdatedAt` is `null` from `kledo_get` even when `kledo_query` has a date.

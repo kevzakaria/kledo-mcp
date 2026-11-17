@@ -19,6 +19,7 @@ import {
 } from '../identity/tenant-identity-catalog.js'
 import {
   decimalSchema,
+  documentsNeedSalespersonNames,
   entityDefinitions,
   exactIdSchema,
   lineItemsNeedUnitNames,
@@ -1775,6 +1776,22 @@ export function createKledoHttpGateway(options: CreateKledoHttpGatewayOptions): 
     return unitNameCache.names
   }
 
+  const currentSalespersonNames = async (
+    signal?: AbortSignal,
+  ): Promise<ReadonlyMap<string, string>> => {
+    const cacheNow = now().getTime()
+    let users =
+      salespersonCache && salespersonCache.expiresAt > cacheNow
+        ? salespersonCache.users
+        : undefined
+    if (users) emitDiagnostic('identity.memory.hit')
+    if (!users) {
+      users = await fetchSalespersons(signal)
+      salespersonCache = { expiresAt: cacheNow + salespersonCacheTtlMs, users }
+    }
+    return new Map(users.map((user) => [user.id, user.name]))
+  }
+
   const fetchNamedArrayCatalog = async (
     path: string,
     activeFrom: 'archive' | 'always',
@@ -2189,8 +2206,28 @@ export function createKledoHttpGateway(options: CreateKledoHttpGatewayOptions): 
           rawItems = rawItems.slice(0, input.pageSize)
         }
       }
+      const queryWarnings: string[] = []
+      let currentUserNames: ReadonlyMap<string, string> | undefined
+      if (
+        (!input.fields?.length || input.fields.includes('salesPerson')) &&
+        documentsNeedSalespersonNames(input.entity, rawItems)
+      ) {
+        try {
+          currentUserNames = await currentSalespersonNames(signal)
+        } catch (error) {
+          if (
+            signal?.aborted ||
+            (error instanceof KledoError && error.code === 'REQUEST_CANCELLED')
+          ) {
+            throw error
+          }
+          queryWarnings.push(
+            'Kledo users could not be read, so salesPerson names are as the document list shows them and may be a former name',
+          )
+        }
+      }
       const items: Array<Record<string, JsonValue>> = rawItems.map((item) =>
-        projectQueryItem(input, normalizeEntityItem(input.entity, item)),
+        projectQueryItem(input, normalizeEntityItem(input.entity, item, { currentUserNames })),
       )
       const canContinue = hasMore && definition.pagination === 'page'
 
@@ -2215,10 +2252,12 @@ export function createKledoHttpGateway(options: CreateKledoHttpGatewayOptions): 
           fetchedAt: now().toISOString(),
           ...(options.tenant ? { tenant: options.tenant } : {}),
           complete: !hasMore,
-          warnings:
-            hasMore && definition.pagination !== 'page'
+          warnings: [
+            ...(hasMore && definition.pagination !== 'page'
               ? ['Kledo does not document cursor continuation for this entity']
-              : [],
+              : []),
+            ...queryWarnings,
+          ],
         },
       }
     },
