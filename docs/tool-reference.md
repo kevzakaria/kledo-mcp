@@ -36,6 +36,13 @@ returned only when already present in the detail response and are never followed
 recursively. The Immediate Parent type comes from Kledo's
 `parent_tran.trans_type_id`; an unknown or missing type is omitted, not guessed.
 
+A commercial document comes back as the same record from `kledo_query` and
+`kledo_get`: one normalizer builds the header, Party, `salesPerson`, tags,
+money fields, and `paymentState` for both tools. Every `line_items` entry has
+one shape on every document type: `id`, `description`, `quantity`, `unit`,
+`product`, money fields when Kledo sends them, and `taxRate`, which is `null`
+for an untaxed line.
+
 For `sales_invoice` and `purchase_invoice`, `document_lineage` validates the
 anchor transaction type, reads the authoritative typed `relations[]`, and
 returns the ordered predecessors. Sales uses Sales Quote (4), Sales Order (6),

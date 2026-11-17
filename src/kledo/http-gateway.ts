@@ -22,7 +22,6 @@ import {
   entityDefinitions,
   exactIdSchema,
   normalizeEntityItem,
-  normalizeSalesMetadata,
   normalizeMoney,
   normalizeTransactionExtras,
   transactionIncludeEntities,
@@ -687,48 +686,6 @@ function shiftIsoDate(date: string, days: number): string {
   const shifted = new Date(`${date}T00:00:00.000Z`)
   shifted.setUTCDate(shifted.getUTCDate() + days)
   return shifted.toISOString().slice(0, 10)
-}
-
-function paymentState(total: string, remaining: string): 'paid' | 'partially_paid' | 'unpaid' {
-  if (compareDecimals(remaining, '0') <= 0) return 'paid'
-  if (compareDecimals(remaining, total) >= 0) return 'unpaid'
-  return 'partially_paid'
-}
-
-function displayName(contact: { name?: string | null; company?: string | null }): string {
-  const company = contact.company?.trim()
-  const person = contact.name?.trim()
-  return company || person || 'Unknown contact'
-}
-
-function normalizedSalesInvoice(invoice: z.infer<typeof rawSalesInvoiceSchema>): Record<string, JsonValue> {
-  const total = decimalString(invoice.amount_after_tax)
-  const remaining = decimalString(invoice.due)
-  const companyName = invoice.contact.company?.trim() || null
-  const personName = invoice.contact.name?.trim() || null
-
-  return {
-    kind: 'sales_invoice',
-    id: String(invoice.id),
-    reference: invoice.ref_number,
-    transactionDate: invoice.trans_date,
-    dueDate: invoice.due_date,
-    shippingDate: invoice.shipping_date ?? null,
-    party: {
-      id: String(invoice.contact.id),
-      displayName: displayName(invoice.contact),
-      companyName,
-      personName,
-    },
-    ...normalizeSalesMetadata(invoice),
-    memo: invoice.memo,
-    statusId:
-      invoice.status_id === null || invoice.status_id === undefined ? null : String(invoice.status_id),
-    total: normalizeMoney(invoice.amount_after_tax, invoice),
-    remaining: normalizeMoney(invoice.due, invoice),
-    paymentState: paymentState(total, remaining),
-    sourceUpdatedAt: invoice.updated_at ?? null,
-  }
 }
 
 function normalizedPaymentTransactions(
@@ -2397,12 +2354,7 @@ export function createKledoHttpGateway(options: CreateKledoHttpGatewayOptions): 
         const selectedItems = extras.lineItems.slice(0, input.lineItemLimit)
         const omittedCount = extras.lineItems.length - selectedItems.length
 
-        const normalizedRecord = {
-          ...normalizeEntityItem(input.entity, envelope.data),
-          ...(input.entity === 'sales_order'
-            ? normalizeSalesMetadata(envelope.data)
-            : {}),
-        }
+        const normalizedRecord = normalizeEntityItem(input.entity, envelope.data)
 
         return {
           entity: input.entity,
@@ -2428,27 +2380,9 @@ export function createKledoHttpGateway(options: CreateKledoHttpGatewayOptions): 
 
       const envelope = rawSalesInvoiceDetailEnvelopeSchema.parse(body)
       const invoice = envelope.data
-      const selectedItems = invoice.items.slice(0, input.lineItemLimit)
-      const omittedCount = invoice.items.length - selectedItems.length
-      const lineItems = selectedItems.map((item) => ({
-        id: String(item.id),
-        description: item.desc,
-        quantity: decimalString(item.qty),
-        unitPrice: normalizeMoney(item.price, item, invoice),
-        subtotal: normalizeMoney(item.subtotal, item, invoice),
-        total: normalizeMoney(item.amount_after_tax, item, invoice),
-        tax: normalizeMoney(item.tax, item, invoice),
-        product: item.product
-          ? { id: String(item.product.id), code: item.product.code, name: item.product.name }
-          : null,
-        taxRate: item.item_tax
-          ? {
-              id: String(item.item_tax.id),
-              name: item.item_tax.name,
-              percent: decimalString(item.item_tax.percent),
-            }
-          : null,
-      }))
+      const allLineItems = normalizeTransactionExtras(invoice).lineItems
+      const lineItems = allLineItems.slice(0, input.lineItemLimit)
+      const omittedCount = allLineItems.length - lineItems.length
       let parentEntity: SalesInvoicePredecessorType = 'sales_order'
       if (
         invoice.parent_tran?.trans_type_id !== null &&
@@ -2540,7 +2474,7 @@ export function createKledoHttpGateway(options: CreateKledoHttpGatewayOptions): 
 
       const output: KledoGetResult = {
         entity: input.entity,
-        record: projectFields(input.entity, input.fields, normalizedSalesInvoice(invoice)),
+        record: projectFields(input.entity, input.fields, normalizeEntityItem(input.entity, invoice)),
         ...(includes.has('line_items') ? { lineItems } : {}),
         ...(includes.has('relation_ids') ? { relations } : {}),
         ...(includes.has('invoice_payments') ? { invoicePayments } : {}),
