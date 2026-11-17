@@ -24,6 +24,10 @@ _Avoid_: Original document, root document
 A typed document that appears earlier in a document's lineage. It may be the Immediate Parent or a more distant ancestor.
 _Avoid_: Parent ID, source ID
 
+**Assigned Salesperson**:
+The Kledo user whose id is the document's `sales_id`, as Kledo's document screen shows it. A list `sales_person` or detail `sales` object names that user only when its id equals `sales_id`; Kledo's list can fill `sales_person` from the previous row when `sales_id` has no matching user. With no matching user the document has no Assigned Salesperson (`salesPerson: null`), the same in `kledo_query` and `kledo_get`.
+_Avoid_: List `sales_person` on its own, Order creator
+
 **Payment Event**:
 A typed receipt or payment transaction applied to an invoice. One Payment Event does not by itself prove that the invoice is fully settled.
 _Avoid_: Paid Date, Invoice, Final Settlement

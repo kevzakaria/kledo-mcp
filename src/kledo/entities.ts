@@ -392,32 +392,21 @@ function contactName(contact: z.infer<typeof rawContactSchema>): Record<string, 
   }
 }
 
-export function normalizeSalesInvoiceMetadata(value: unknown): Record<string, JsonValue> {
+/**
+ * The salesperson is the user behind `sales_id`, as Kledo's own document screen
+ * shows it. A list `sales_person` or detail `sales` object counts only when its
+ * id equals `sales_id`: Kledo's list fills `sales_person` from the previous row
+ * when `sales_id` has no matching user. No match means no salesperson (null).
+ */
+export function normalizeSalesMetadata(value: unknown): Record<string, JsonValue> {
   const metadata = rawSalesMetadataSchema.parse(value)
+  const salesId =
+    metadata.sales_id === null || metadata.sales_id === undefined ? null : id(metadata.sales_id)
+  const salesperson = [metadata.sales_person, metadata.sales].find(
+    (candidate) => candidate !== null && candidate !== undefined && id(candidate.id) === salesId,
+  )
   return {
-    salesPerson:
-      metadata.sales_id === null ||
-      metadata.sales_id === undefined ||
-      metadata.sales === null ||
-      metadata.sales === undefined
-        ? null
-        : {
-            id: id(metadata.sales_id),
-            name: metadata.sales.name,
-          },
-    tags: metadata.tags.map((tag) => ({ id: id(tag.id), name: tag.name })),
-  }
-}
-
-function normalizeSalesMetadata(value: unknown): Record<string, JsonValue> {
-  const metadata = rawSalesMetadataSchema.parse(value)
-  const salesperson = metadata.sales_person ?? metadata.sales
-  return {
-    salesPerson: salesperson
-      ? { id: id(salesperson.id), name: salesperson.name }
-      : metadata.sales_id === null || metadata.sales_id === undefined
-        ? null
-        : { id: id(metadata.sales_id), name: null },
+    salesPerson: salesperson && salesId !== null ? { id: salesId, name: salesperson.name } : null,
     tags: metadata.tags.map((tag) => ({ id: id(tag.id), name: tag.name })),
   }
 }

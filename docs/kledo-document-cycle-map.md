@@ -77,7 +77,7 @@ Status IDs are entity-scoped and may be localized. Do not create one global
 | Due or expiry date | `due_date` | Document-specific `dueDate` or report date field |
 | Shipping date | `shipping_date` | `shippingDate` |
 | Warehouse | `warehouse_id` | `warehouseId` relation/filter where supported |
-| Salesperson | `sales_id`, `sales` | `salesPersonId` filter or sanitized salesperson identity |
+| Salesperson | `sales_id`, with `sales` or list `sales_person` only when its id equals `sales_id` | `salesPersonId` filter or sanitized salesperson identity; `null` when no user matches `sales_id` |
 | Transaction type | `trans_type_id` | `documentType` plus `transactionTypeId` in typed lineage |
 | Total before tax | `amount` | Explicit before-tax amount where the contract exposes it |
 | Total after tax | `amount_after_tax` | `total` or a report-specific money field |

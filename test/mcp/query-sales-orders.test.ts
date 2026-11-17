@@ -155,7 +155,7 @@ describe('kledo_query sales orders', () => {
             companyName: null,
             personName: 'Bima',
           },
-          salesPerson: { id: '352182', name: null },
+          salesPerson: null,
           tags: [],
           memo: null,
           total: { amount: '250000', currency: null },
