@@ -65,7 +65,9 @@ amount, status, payment type, and destination bank account. Sales Invoice uses
 Invoice Payment type 17 plus its dedicated child-transactions endpoint.
 Purchase Invoice uses Purchase Payment type 16 embedded in the detail response;
 the verified API has no Purchase Invoice child-transactions route. Missing or
-conflicting halves fail safely rather than returning a partially joined event.
+conflicting halves fail safely rather than returning a partially joined event,
+except that a payment relation with no payment row is left out: older Kledo
+documents list such relations, and they are not payments of that document.
 `paymentEventLimit` defaults to 50 and is capped at 200.
 
 For `sales_invoice`, the optional `invoice_payments` include returns bounded

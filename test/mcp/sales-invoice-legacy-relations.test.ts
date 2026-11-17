@@ -35,6 +35,15 @@ const legacyInvoice = {
       amount_after_tax: '500.00',
       business_tran_id: null,
     },
+    // A payment relation with no row in the invoice's payment list.
+    {
+      id: 615,
+      ref_number: null,
+      trans_type_id: 17,
+      trans_date: '2025-02-26',
+      amount_after_tax: '300.00',
+      business_tran_id: null,
+    },
     { id: 620, ref_number: null, trans_type_id: 23, trans_date: '2025-02-02', amount_after_tax: '110.00' },
     { id: 630, ref_number: null, trans_type_id: 24, trans_date: '2025-02-26', amount_after_tax: '100.00' },
     {
@@ -155,6 +164,19 @@ describe('kledo_get on Sales Invoices with legacy relations', () => {
     expect(result.structuredContent).toMatchObject({
       paymentEvents: [{ id: '610', documentType: 'invoice_payment', number: null }],
     })
+    expect((result.structuredContent as { paymentEvents: unknown[] }).paymentEvents).toHaveLength(1)
+  })
+
+  it('still fails safely when a payment row has no relation', async () => {
+    const broken = {
+      ...legacyInvoice,
+      relations: legacyInvoice.relations.filter((relation) => relation.id !== 610),
+    }
+    const client = await connect(broken)
+    const result = await getInvoice(client, ['payment_events'])
+
+    expect(result.isError).toBe(true)
+    expect(JSON.stringify(result)).toContain('SCHEMA_MISMATCH')
   })
 
   it('still fails safely when a predecessor has no number', async () => {

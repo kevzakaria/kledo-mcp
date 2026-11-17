@@ -1101,12 +1101,9 @@ function normalizedPaymentEvents(
     })
   })
 
-  if (events.length !== paymentRelations.size) {
-    throw new KledoError(
-      'SCHEMA_MISMATCH',
-      `Kledo returned a ${paymentEventLabel} relation without a matching transaction`,
-    )
-  }
+  // Events come from the document's own payment rows. Older Kledo documents can
+  // list payment relations that have no row there; they are not payments of
+  // this document, so they are left out rather than failing the request.
   return events
 }
 
