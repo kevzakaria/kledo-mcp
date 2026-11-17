@@ -14,8 +14,9 @@ Nothing yet.
 ## [0.4.0] - 2026-11-17
 
 This release makes Sales Order and Sales Invoice records consistent between
-`kledo_query` and `kledo_get`. Some fields change shape, so clients that read
-`salesPerson`, line items, or relation types should check the notes below.
+`kledo_query` and `kledo_get`, and fixes `kledo_get` on older Sales Invoices.
+Some fields change shape, so clients that read `salesPerson`, line items,
+payment events, or relation types should check the notes below.
 
 ### Changed
 
@@ -29,6 +30,13 @@ This release makes Sales Order and Sales Invoice records consistent between
 
 ### Fixed
 
+- `kledo_get` no longer fails with `SCHEMA_MISMATCH` on older Sales Invoices
+  whose relations have no document number or are not part of the quote, order
+  and delivery chain. Such payment events now return `number: null`
+  ([#32](https://github.com/kevzakaria/kledo-mcp/pull/32)).
+- `kledo_get` with `line_items` now returns each line's unit name, read from
+  Kledo's unit catalog, instead of `null`
+  ([#33](https://github.com/kevzakaria/kledo-mcp/pull/33)).
 - `kledo_get` now returns `unbilled` for Sales Orders, derived from the billed
   amount in the detail response, so it matches `kledo_query`
   ([#25](https://github.com/kevzakaria/kledo-mcp/pull/25)).
