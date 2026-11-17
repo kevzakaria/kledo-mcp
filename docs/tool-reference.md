@@ -51,9 +51,13 @@ and Purchase Delivery (8). It also checks that `parent_tran` names the same
 typed immediate predecessor. It never infers a document type from lifecycle
 position or numeric ordering. The `lineageLimit` defaults to 50 and is capped
 at 200; truncation is explicit and sets `documentLineage.complete` to false.
+Relations outside that chain, such as payments, down payments, debt payments
+and returns, are skipped by the lineage; a predecessor relation without a
+document number fails safely.
 
 The `payment_events` include joins typed payment relations, which carry the
-document number, to compact transaction rows, which carry the event date,
+document number (`null` when Kledo has none, as on some older payments), to
+compact transaction rows, which carry the event date,
 amount, status, payment type, and destination bank account. Sales Invoice uses
 Invoice Payment type 17 plus its dedicated child-transactions endpoint.
 Purchase Invoice uses Purchase Payment type 16 embedded in the detail response;
@@ -267,8 +271,8 @@ Version `0.1.0` implements the complete catalog above:
 - sales and purchase invoice detail can include bounded typed QU -> SO -> DO or
   PQ -> PO -> PD predecessor chains plus joined Invoice or Purchase Payment
   events. The adapter reconciles `relations[]`, `parent_tran`, and the available
-  transaction source; unexpected type, parent, relation, account, or row shapes
-  fail safely. The legacy bounded `invoice_payments` view remains available for
+  transaction source; relation types outside the chain are skipped, and
+  unexpected parent, predecessor, account, or row shapes fail safely. The legacy bounded `invoice_payments` view remains available for
   Sales Invoice only;
 - Sales Invoice can opt into one bounded embedded PDF resource with safe
   metadata; the opaque upstream print locator is never returned or logged;

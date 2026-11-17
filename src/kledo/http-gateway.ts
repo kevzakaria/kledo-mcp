@@ -117,7 +117,7 @@ const rawSalesInvoiceLineItemSchema = z
 const rawDocumentRelationSchema = z
   .object({
     id: exactIdSchema.refine((value) => /^[1-9]\d{0,19}$/.test(String(value))),
-    ref_number: z.string().trim().min(1),
+    ref_number: z.string().trim().min(1).nullable(),
     trans_type_id: exactIdSchema.refine((value) => /^[1-9]\d{0,19}$/.test(String(value))),
     trans_date: z.string().date().nullable().optional(),
     business_tran_id: exactIdSchema.nullable().optional(),
@@ -838,17 +838,13 @@ function normalizedSalesInvoiceLineage(invoice: SalesInvoiceDetail, lineageLimit
   for (const relation of invoice.relations) {
     const transactionTypeId = String(relation.trans_type_id)
     const documentType = documentTypeForTransactionTypeId(transactionTypeId)
-    if (!documentType) {
+    // Payments, down payments, returns and other relation types are not part of
+    // the predecessor chain; payments are read separately as payment events.
+    if (!isSalesInvoicePredecessorType(documentType)) continue
+    if (relation.ref_number === null) {
       throw new KledoError(
         'SCHEMA_MISMATCH',
-        'Kledo returned an unknown transaction type in Sales Invoice lineage',
-      )
-    }
-    if (documentType === 'invoice_payment') continue
-    if (!isSalesInvoicePredecessorType(documentType)) {
-      throw new KledoError(
-        'SCHEMA_MISMATCH',
-        'Kledo returned an unsupported document type in Sales Invoice lineage',
+        'Kledo returned a Sales Invoice predecessor without a document number',
       )
     }
 
@@ -950,17 +946,13 @@ function normalizedPurchaseInvoiceLineage(
   for (const relation of invoice.relations) {
     const transactionTypeId = String(relation.trans_type_id)
     const documentType = documentTypeForTransactionTypeId(transactionTypeId)
-    if (!documentType) {
+    // Payments, down payments, returns and other relation types are not part of
+    // the predecessor chain; payments are read separately as payment events.
+    if (!isPurchaseInvoicePredecessorType(documentType)) continue
+    if (relation.ref_number === null) {
       throw new KledoError(
         'SCHEMA_MISMATCH',
-        'Kledo returned an unknown transaction type in Purchase Invoice lineage',
-      )
-    }
-    if (documentType === 'purchase_payment') continue
-    if (!isPurchaseInvoicePredecessorType(documentType)) {
-      throw new KledoError(
-        'SCHEMA_MISMATCH',
-        'Kledo returned an unsupported document type in Purchase Invoice lineage',
+        'Kledo returned a Purchase Invoice predecessor without a document number',
       )
     }
 
