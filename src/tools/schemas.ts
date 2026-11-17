@@ -980,7 +980,12 @@ const paymentEventBaseOutputSchema = invoicePaymentOutputSchema.extend({
       'Date of this direct Kledo sales or purchase payment event; not proof of final settlement or paid date.',
     ),
   relation: z.literal('payment_for'),
-  number: z.string().trim().min(1),
+  number: z
+    .string()
+    .trim()
+    .min(1)
+    .nullable()
+    .describe('Payment document number; null when Kledo has none for an older payment.'),
 })
 
 export const paymentEventOutputSchema = z.discriminatedUnion('documentType', [
