@@ -183,6 +183,7 @@ locator stays internal.
 
 Full history lives in [CHANGELOG.md](CHANGELOG.md).
 
+- **0.4.0** (2026-11-17): Sales Order and Sales Invoice records match between `kledo_query` and `kledo_get`; `salesPerson` follows `sales_id`, line items always carry `unit` and `taxRate`, Sales Order detail returns `unbilled`, parent document types are no longer guessed, `kledo_get` no longer fails on older Sales Invoices, and line item `unit` carries the unit name ([#24](https://github.com/kevzakaria/kledo-mcp/pull/24) to [#37](https://github.com/kevzakaria/kledo-mcp/pull/37)).
 - **0.3.0** (2026-09-05): `sales_order` query and detail records carry normalized `salesPerson` and `tags`, with projection support ([#16](https://github.com/kevzakaria/kledo-mcp/pull/16)).
 - **0.2.0** (2026-09-03): `sales_invoice` carries `salesPerson` and `tags`, plus the `salesPersonId` filter ([#12](https://github.com/kevzakaria/kledo-mcp/pull/12)); release workflow fixes ([#14](https://github.com/kevzakaria/kledo-mcp/pull/14), [#15](https://github.com/kevzakaria/kledo-mcp/pull/15)).
 - **0.1.0-rc.1** (2026-08-27): first preview with the three read-only tools.
