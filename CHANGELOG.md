@@ -34,6 +34,9 @@ payment events, or relation types should check the notes below.
   whose relations have no document number or are not part of the quote, order
   and delivery chain. Such payment events now return `number: null`
   ([#32](https://github.com/kevzakaria/kledo-mcp/pull/32)).
+- `kledo_get` with `payment_events` no longer fails on older Sales Invoices
+  that list payment relations with no matching payment; those relations are
+  left out ([#37](https://github.com/kevzakaria/kledo-mcp/pull/37)).
 - `kledo_get` with `line_items` now returns each line's unit name, read from
   Kledo's unit catalog, instead of `null`
   ([#33](https://github.com/kevzakaria/kledo-mcp/pull/33)).
