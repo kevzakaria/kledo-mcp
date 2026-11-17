@@ -11,6 +11,30 @@ curated wording below.
 
 Nothing yet.
 
+## [0.4.1] - 2026-11-17
+
+This patch release fixes two record differences left from 0.4.0 and updates
+dependencies with security fixes. Tool names, inputs and output shapes are
+unchanged.
+
+### Fixed
+
+- `kledo_query` now returns a Sales Order's or Sales Invoice's `salesPerson`
+  under the user's current name, like `kledo_get`, instead of the name the
+  document list kept from before a rename
+  ([#39](https://github.com/kevzakaria/kledo-mcp/pull/39)).
+- `document_lineage` on Sales Invoices no longer lists other deliveries of the
+  same Sales Order that were billed on different invoices
+  ([#42](https://github.com/kevzakaria/kledo-mcp/pull/42)).
+
+### Security
+
+- Updated zod to 4.6.7, fixing GHSA-mrhx-c7xc-m3w5. Published tool schemas
+  keep the same client-compatible shape
+  ([#43](https://github.com/kevzakaria/kledo-mcp/pull/43)).
+- Updated the MCP TypeScript SDK to 2.4.0, which includes the SDK's security
+  fixes ([#41](https://github.com/kevzakaria/kledo-mcp/pull/41)).
+
 ## [0.4.0] - 2026-11-17
 
 This release makes Sales Order and Sales Invoice records consistent between
@@ -103,7 +127,8 @@ payment events, or relation types should check the notes below.
   ([#1](https://github.com/kevzakaria/kledo-mcp/pull/1),
   [#2](https://github.com/kevzakaria/kledo-mcp/pull/2)).
 
-[Unreleased]: https://github.com/kevzakaria/kledo-mcp/compare/v0.4.0...HEAD
+[Unreleased]: https://github.com/kevzakaria/kledo-mcp/compare/v0.4.1...HEAD
+[0.4.1]: https://github.com/kevzakaria/kledo-mcp/releases/tag/v0.4.1
 [0.4.0]: https://github.com/kevzakaria/kledo-mcp/releases/tag/v0.4.0
 [0.3.0]: https://github.com/kevzakaria/kledo-mcp/releases/tag/v0.3.0
 [0.2.0]: https://github.com/kevzakaria/kledo-mcp/releases/tag/v0.2.0
